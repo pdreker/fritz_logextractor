@@ -1,6 +1,6 @@
 [project]
 name = "fritz-logextractor"
-version = "0.0.0"
+version = "0.1.0"
 description = "Extract the event log of AVM Fritz! devices and forward it as structured log lines"
 authors = [{name = "Patrick Dreker", email = "patrick@dreker.de"}]
 license = "Apache-2.0"
