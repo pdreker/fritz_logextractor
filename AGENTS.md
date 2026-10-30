@@ -62,7 +62,7 @@ per device through fritzconnection's session), poll loop with `--once` in `__mai
 boxes).
 
 **Missing:** state file, reboot detection, handling of pre-sync timestamps, identity by position
-instead of time (below), remote access, tests against a real box.
+instead of time (below), remote access, test fixtures built from real captures.
 
 ### Data source
 
@@ -80,10 +80,18 @@ instead of time (below), remote access, tests against a real box.
 - **Not append-only.** A repeated message is folded into one row: its time moves to the latest
   occurrence and `msg` gains a counter suffix (German: `[N Meldungen seit DD.MM.YY HH:MM:SS]`).
 - **Bounded buffer.** Old rows drop off; a reboot empties the log.
-- **Timestamps before time sync.** After a reboot, the first entries carry a bogus date and a
-  time starting at `00:00:00`; they keep it after the box syncs its clock. Open question: does
-  the time count up from `00:00:00` (usable for ordering) or stay fixed? Needs a sample log
-  taken right after a reboot.
+- **Timestamps before time sync.** Seen on a 7690 with FRITZ!OS 8.50 (captures of October
+  2026): until the box syncs its clock, entries are dated `01.01.70` and their time is the time
+  since boot, counting up from `00:00:00`. On sync, the box rewrites all of them at once to boot
+  time + that offset, in the same snapshot that first shows the `id` 2104 sync row. From then
+  on it computes these times afresh on each request, so they jitter by ±1 s between polls. The
+  order of the rows stays stable throughout. A repeater that gets the time from the box over
+  the LAN logged nothing before its sync row. Other models and firmware not yet checked.
+- **Reboot.** The log is empty afterwards; there is no row for the shutdown or the restart.
+  `NewUpTime` drops (seen: 1 294 670 s → 86 s), so it detects the reboot. Rows logged between
+  the last poll and the reboot are lost.
+- **Own logins.** The tool's TR-064 login shows up as a row (`id` 506/507, "Anmeldung einer
+  App"), once per session, not on every poll.
 - **Sensitive content.** Messages embed WAN addresses, host and user names, and DynDNS update
   URLs including the token (`q=…`), which must be redacted.
 
@@ -102,7 +110,8 @@ instead of time (below), remote access, tests against a real box.
 
 - One JSON object per event on stdout: device name and serial, `id`, `group`, `msg`, box
   timestamp (raw), resolved timestamp with UTC offset (time zone from `Time1:GetInfo`), and
-  `time_estimated: true` for pre-sync rows (estimated as boot time = now - uptime).
+  `time_estimated: true` for pre-sync rows (estimated as boot time + the row's time since boot,
+  with boot time = now - uptime; matches the box's own rewrite to within a second).
 - Own diagnostics go to stderr, so the event stream stays clean.
 
 ### Out of scope
