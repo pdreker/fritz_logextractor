@@ -40,6 +40,32 @@ Events go to stdout, one JSON object per line; the tool's own messages go to std
 `id` is the message type and does not depend on the box's language; `msg` is localized. DynDNS
 update tokens (`q=...`) are redacted.
 
+## Container image
+
+Images for linux/amd64 and linux/arm64 are on Docker Hub as
+[`pdreker/fritz_logextractor`](https://hub.docker.com/r/pdreker/fritz_logextractor):
+
+| Tag | Built from |
+|---|---|
+| `develop` | every push to `main` |
+| `<version>`, `<major>.<minor>`, `<major>`, `latest` | each release, also for linux/arm/v6 and linux/arm/v7 |
+
+No release has been built as an image yet, so only `develop` exists for now.
+
+```bash
+podman pull docker.io/pdreker/fritz_logextractor:develop     # or: docker pull pdreker/fritz_logextractor:develop
+podman run --rm \
+  -e FRITZ_HOSTNAME=fritz.box -e FRITZ_USERNAME=logreader -e FRITZ_PASSWORD='...' \
+  docker.io/pdreker/fritz_logextractor:develop
+```
+
+`docker run` takes the same options. Arguments after the image name go to the tool, e.g. `--once`
+or `--config /etc/fritz/config.yaml` with the file mounted under `/etc/fritz`.
+
+The image runs as `nobody` (65534): mounted config and password files must be readable by that
+user. `/var/lib/fritzlogextractor` is a volume for the state file once the tool keeps one; a
+host directory mounted there must be writable by 65534.
+
 ## Configuration
 
 Either a YAML file (`--config`, several devices) or environment variables (one device).
