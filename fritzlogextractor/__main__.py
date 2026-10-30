@@ -75,6 +75,11 @@ def poll_all(extractors: list[DeviceExtractor]) -> None:
         except ExtractionError as e:
             logger.warning("%s: %s, will retry", extractor.name, e)
             continue
+        except Exception:
+            # An answer nobody expected must not stop the other devices or later polls.
+            # The tracker commits only after a successful poll, so nothing is lost.
+            logger.exception("%s: unexpected error, will retry", extractor.name)
+            continue
         for record in records:
             sys.stdout.write(json.dumps(record, ensure_ascii=False) + "\n")
         sys.stdout.flush()
