@@ -213,6 +213,40 @@ class TestCapture:
         assert len(DeviceExtractor(device(), blocked).poll()) == 1
         assert "Box: could not store the snapshot" in caplog.text
 
+    def test_failed_polls_are_logged_with_the_error(self, mock_fc_cls, tmp_path):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=INFO)
+        fc = mock_fc_cls.return_value
+        fc.session.get.side_effect = [
+            response(b"", 503),
+            RequestsConnectionError("refused"),
+            response(log_xml(CONNECTED)),
+        ]
+        extractor = DeviceExtractor(device(), tmp_path)
+
+        for _ in range(2):
+            with pytest.raises(ExtractionError):
+                extractor.poll()
+        extractor.poll()
+
+        polls = read_polls(tmp_path / "Box")
+        assert [p.get("error") for p in polls] == [
+            "HTTP 503",
+            "could not read the event log (ConnectionError)",
+            None,
+        ]
+        assert "uptime" not in polls[0]
+        assert polls[2]["uptime"] == 3600
+
+    def test_failure_to_log_a_failed_poll_is_only_a_warning(self, mock_fc_cls, tmp_path, caplog):
+        setup_fc(mock_fc_cls, b"", device_info=INFO)
+        mock_fc_cls.return_value.session.get.side_effect = [response(b"", 500)]
+        blocked = tmp_path / "file"
+        blocked.write_text("")
+
+        with pytest.raises(ExtractionError, match="HTTP 500"):
+            DeviceExtractor(device(), blocked).poll()
+        assert "Box: could not log the failed poll" in caplog.text
+
     def test_without_capture_dir_no_device_info_is_read(self, mock_fc_cls):
         fc = setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=INFO)
 

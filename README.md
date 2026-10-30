@@ -52,7 +52,8 @@ fritzlogextractor --capture ./capture
 ```
 
 Each device gets a directory below `DIR`. Every poll adds a line to `polls.jsonl` with poll time,
-uptime, model, firmware and the SHA-256 of the log; the log itself is stored once per distinct
+uptime, model, firmware and the SHA-256 of the log, or with `error` if the log could not be read
+(e.g. while the device reboots); the log itself is stored once per distinct
 content as `<sha256 prefix>.xml`. In the container, use a directory in the volume, e.g.
 `--capture /var/lib/fritzlogextractor/capture`.
 

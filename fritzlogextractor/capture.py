@@ -15,9 +15,10 @@
 
 Each device gets a directory below the capture directory. Every poll appends one
 line to ``polls.jsonl`` (poll time, uptime, model, firmware, SHA-256 of the
-body); the body itself is stored once per distinct content as
-``<sha256 prefix>.xml``. A box whose log did not change thus costs one line per
-poll, and a restart of the tool does not store the same snapshot again.
+body, or the error if the log could not be read); the body itself is stored once
+per distinct content as ``<sha256 prefix>.xml``. A box whose log did not change
+thus costs one line per poll, and a restart of the tool does not store the same
+snapshot again.
 
 The snapshots are stored as the box sent them: they hold addresses, host and user
 names and DynDNS tokens. Files are created readable by the owner only.
@@ -57,14 +58,23 @@ class SnapshotCapture:
             partial.write_bytes(body)
             partial.replace(snapshot)
 
-        line = {
-            "poll_time": datetime.now(UTC).isoformat(timespec="seconds"),
-            "uptime": info.get("NewUpTime"),
-            "model": info.get("NewModelName"),
-            "firmware": info.get("NewSoftwareVersion"),
-            "sha256": digest,
-            "file": snapshot.name,
-        }
+        self._log_poll(
+            {
+                "uptime": info.get("NewUpTime"),
+                "model": info.get("NewModelName"),
+                "firmware": info.get("NewSoftwareVersion"),
+                "sha256": digest,
+                "file": snapshot.name,
+            }
+        )
+
+    def record_failure(self, error: str) -> None:
+        """Log a poll that got no event log, so gaps (e.g. a reboot) show in the data."""
+        self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._log_poll({"error": error})
+
+    def _log_poll(self, fields: dict[str, Any]) -> None:
+        line = {"poll_time": datetime.now(UTC).isoformat(timespec="seconds"), **fields}
         polls = self.directory / "polls.jsonl"
         polls.touch(mode=0o600)
         with polls.open("a") as f:
