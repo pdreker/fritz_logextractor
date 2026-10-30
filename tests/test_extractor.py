@@ -290,6 +290,18 @@ class TestMain:
         assert [json.loads(line)["id"] for line in lines] == [22, 504]
         assert "Broken: could not read the event log (Timeout), will retry" in caplog.text
 
+    def test_poll_all_survives_unexpected_errors(self, mock_fc_cls, capsys, caplog):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED))
+        buggy = MagicMock(spec=DeviceExtractor)
+        buggy.name = "Buggy"
+        buggy.poll.side_effect = TypeError("fromisoformat: argument must be str")
+
+        poll_all([buggy, DeviceExtractor(device())])
+
+        assert [json.loads(line)["id"] for line in capsys.readouterr().out.splitlines()] == [22]
+        assert "Buggy: unexpected error, will retry" in caplog.text
+        assert "TypeError: fromisoformat" in caplog.text
+
     def test_once_reads_each_device_and_exits(self, mock_fc_cls, capsys):
         setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(LOGIN))
 
