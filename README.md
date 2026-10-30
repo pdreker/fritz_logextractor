@@ -81,7 +81,8 @@ podman run --rm \
 ```
 
 `docker run` takes the same options. Arguments after the image name go to the tool, e.g. `--once`
-or `--config /etc/fritz/config.yaml` with the file mounted under `/etc/fritz`.
+or `--config /etc/fritz/config.yaml` with the file mounted under `/etc/fritz` (the `-e` variables
+are then ignored, see [Configuration](#configuration)).
 
 The image runs as `nobody` (65534): mounted config and password files must be readable by that
 user. `/var/lib/fritzlogextractor` is a volume for the state file once the tool keeps one; a
@@ -89,7 +90,52 @@ host directory mounted there must be writable by 65534.
 
 ## Configuration
 
-Either a YAML file (`--config`, several devices) or environment variables (one device).
+The tool reads its settings from **either** a YAML file **or** environment variables, never
+from both:
+
+- With `--config FILE`, only the file counts. **All `FRITZ_*` environment variables are
+  ignored**, including `FRITZ_POLL_INTERVAL` and `FRITZ_LOG_LEVEL`: set these in the file.
+- Without `--config`, the environment configures exactly one device.
+
+`--log-level` on the command line overrides the log level from either source.
+
+### Config file
+
+The file is the only way to poll several devices. Top-level keys apply to the tool, each entry
+under `devices` describes one device:
+
+```yaml
+log_level: INFO
+poll_interval: 60              # seconds between polls, at least 10
+state_dir: /var/lib/fritzlogextractor
+
+devices:
+  - name: Fritz!Box 7690       # shown as "device" in each event; defaults to the hostname
+    hostname: fritz.box
+    username: logreader
+    password_file: /etc/fritz/password
+    use_tls: true
+  - name: Repeater
+    hostname: fritz.repeater
+    username: logreader
+    password: "..."
+    connection_timeout: 0      # no timeout
+```
+
+Only `username` and one of `password` or `password_file` are required per device; every other
+key falls back to the defaults below. The tool does not check for unknown keys, so a misspelled
+key goes unnoticed and its default applies. A file read with `password_file` may end in a
+newline; the tool strips it.
+
+### Environment variables
+
+```bash
+export FRITZ_HOSTNAME=fritz.box FRITZ_USERNAME=logreader FRITZ_PASSWORD_FILE=/run/secrets/fritz
+export FRITZ_POLL_INTERVAL=30
+fritzlogextractor
+```
+
+### Reference
 
 | YAML key | Environment variable | Default |
 |---|---|---|
@@ -97,15 +143,15 @@ Either a YAML file (`--config`, several devices) or environment variables (one d
 | `poll_interval` | `FRITZ_POLL_INTERVAL` | `60` (seconds, at least 10) |
 | `state_dir` | `FRITZ_STATE_DIR` | `/var/lib/fritzlogextractor` (not used yet) |
 | `devices[].hostname` | `FRITZ_HOSTNAME` | `fritz.box` |
-| `devices[].name` | `FRITZ_NAME` | `Fritz!Box` (env) |
+| `devices[].name` | `FRITZ_NAME` | the hostname (file), `Fritz!Box` (env) |
 | `devices[].username` | `FRITZ_USERNAME` | *(required)* |
 | `devices[].password` | `FRITZ_PASSWORD` | *(required unless password_file is set)* |
 | `devices[].password_file` | `FRITZ_PASSWORD_FILE` | |
 | `devices[].connection_timeout` | `FRITZ_CONNECTION_TIMEOUT` | `10` (`0` disables it) |
 | `devices[].use_tls` | `FRITZ_USE_TLS` | `false` |
 
-Use a separate Fritz!Box user for the tool, with a long random password: TR-064 logs in with
-MD5 digest authentication.
+Use a separate Fritz!Box user for the tool, with a long random password (Fritz!OS accepts at most
+32 characters for TR-064): TR-064 logs in with MD5 digest authentication.
 
 ## Development
 
