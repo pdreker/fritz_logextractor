@@ -102,18 +102,32 @@ class DeviceExtractor:
         except OSError as e:
             logger.warning("%s: could not store the snapshot (%s)", self.name, e)
 
+    def _capture_failure(self, error: str) -> None:
+        if self.capture is None:
+            return
+        try:
+            self.capture.record_failure(error)
+        except OSError as e:
+            logger.warning("%s: could not log the failed poll (%s)", self.name, e)
+
     def poll(self) -> list[dict[str, Any]]:
         """Return the records of all entries not emitted before, oldest first."""
         try:
             fc = self._connection()
             body = self._fetch(fc)
-            # Capture before parsing, so a body the parser rejects is kept too.
-            self._capture(fc, body)
-            parsed = parse_event_log(body)
         except (FritzConnectionException, RequestException, KeyError) as e:
             self._fc = None
             msg = f"could not read the event log ({type(e).__name__})"
+            self._capture_failure(msg)
             raise ExtractionError(msg) from None
+        except ExtractionError as e:
+            self._capture_failure(str(e))
+            raise
+
+        # Capture before parsing, so a body the parser rejects is kept too.
+        self._capture(fc, body)
+        try:
+            parsed = parse_event_log(body)
         except EventLogParseError as e:
             msg = f"could not parse the event log ({e})"
             raise ExtractionError(msg) from None
