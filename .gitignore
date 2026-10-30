@@ -3,6 +3,9 @@ fritz-mixin/vendor/**
 requirements.txt
 .DS_Store
 
+# Raw event log snapshots from --capture (unredacted)
+/capture/
+
 # Claude Code local settings (personal allowlists etc.)
 .claude/settings.local.json
 
