@@ -1,0 +1,71 @@
+# Copyright 2026 Patrick Dreker <patrick@dreker.de>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Raw snapshots of the event log, to study how a box changes its log over time.
+
+Each device gets a directory below the capture directory. Every poll appends one
+line to ``polls.jsonl`` (poll time, uptime, model, firmware, SHA-256 of the
+body); the body itself is stored once per distinct content as
+``<sha256 prefix>.xml``. A box whose log did not change thus costs one line per
+poll, and a restart of the tool does not store the same snapshot again.
+
+The snapshots are stored as the box sent them: they hold addresses, host and user
+names and DynDNS tokens. Files are created readable by the owner only.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+__all__ = ["SnapshotCapture"]
+
+_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
+_DIGEST_PREFIX = 16
+
+
+class SnapshotCapture:
+    """Stores the snapshots of one device below ``directory``."""
+
+    def __init__(self, directory: Path, device: str) -> None:
+        self.directory = directory / (_UNSAFE_RE.sub("_", device) or "device")
+
+    def record(self, body: bytes, info: dict[str, Any]) -> None:
+        """Store ``body`` unless already stored and log the poll; ``info`` is DeviceInfo:GetInfo."""
+        self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        digest = hashlib.sha256(body).hexdigest()
+        snapshot = self.directory / f"{digest[:_DIGEST_PREFIX]}.xml"
+        if not snapshot.exists():
+            partial = snapshot.with_suffix(".tmp")
+            partial.touch(mode=0o600)
+            partial.write_bytes(body)
+            partial.replace(snapshot)
+
+        line = {
+            "poll_time": datetime.now(UTC).isoformat(timespec="seconds"),
+            "uptime": info.get("NewUpTime"),
+            "model": info.get("NewModelName"),
+            "firmware": info.get("NewSoftwareVersion"),
+            "sha256": digest,
+            "file": snapshot.name,
+        }
+        polls = self.directory / "polls.jsonl"
+        polls.touch(mode=0o600)
+        with polls.open("a") as f:
+            f.write(json.dumps(line) + "\n")

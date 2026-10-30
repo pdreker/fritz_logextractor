@@ -42,6 +42,24 @@ Events go to stdout, one JSON object per line; the tool's own messages go to std
 `id` is the message type and does not depend on the box's language; `msg` is localized. DynDNS
 update tokens (`q=...`) are redacted.
 
+### Capturing snapshots
+
+To study how a box changes its log over time (folded entries, reboots, timestamps before time
+sync), `--capture DIR` also stores what the box sends, next to the normal output:
+
+```bash
+fritzlogextractor --capture ./capture
+```
+
+Each device gets a directory below `DIR`. Every poll adds a line to `polls.jsonl` with poll time,
+uptime, model, firmware and the SHA-256 of the log; the log itself is stored once per distinct
+content as `<sha256 prefix>.xml`. In the container, use a directory in the volume, e.g.
+`--capture /var/lib/fritzlogextractor/capture`.
+
+> [!CAUTION]
+> The snapshots are **not redacted**: they contain addresses, host and user names and DynDNS
+> tokens. Redact them before you share them.
+
 ## Container image
 
 Images for linux/amd64 and linux/arm64 are on Docker Hub as
