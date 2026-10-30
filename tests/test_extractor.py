@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -115,6 +116,26 @@ class TestDeviceExtractor:
 
     def test_missing_time_zone_gives_times_without_offset(self, mock_fc_cls):
         setup_fc(mock_fc_cls, log_xml(CONNECTED))
+
+        assert DeviceExtractor(device()).poll()[0]["event_time"] == "2026-10-09T08:31:57"
+
+    @pytest.mark.parametrize(
+        "current", [None, datetime(1970, 1, 1, 0, 1, 28), "not a time"], ids=repr
+    )
+    def test_current_time_before_clock_sync_falls_back_to_the_rule(self, mock_fc_cls, current):
+        setup_fc(
+            mock_fc_cls,
+            log_xml(CONNECTED),
+            time_info={
+                "NewLocalTimeZoneName": "CET-1CEST,M3.5.0,M10.5.0/3",
+                "NewCurrentLocalTime": current,
+            },
+        )
+
+        assert DeviceExtractor(device()).poll()[0]["event_time"] == "2026-10-09T08:31:57+02:00"
+
+    def test_current_time_before_clock_sync_without_rule_gives_no_offset(self, mock_fc_cls):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), time_info={"NewCurrentLocalTime": None})
 
         assert DeviceExtractor(device()).poll()[0]["event_time"] == "2026-10-09T08:31:57"
 

@@ -83,10 +83,15 @@ class DeviceExtractor:
         except FritzServiceError, FritzActionError, FritzConnectionException, RequestException:
             logger.debug("No time zone from %s, event times have no offset", self.name)
             return None, None
-        try:
-            current = datetime.fromisoformat(info["NewCurrentLocalTime"]).utcoffset()
-        except KeyError, ValueError:
-            current = None
+        # An ISO string with offset normally; right after a reboot, before the clock is
+        # synced, fritzconnection hands over None or a naive datetime instead.
+        value = info.get("NewCurrentLocalTime")
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value)
+            except ValueError:
+                value = None
+        current = value.utcoffset() if isinstance(value, datetime) else None
         return info.get("NewLocalTimeZoneName"), current
 
     def _capture(self, fc: FritzConnection, body: bytes) -> None:
