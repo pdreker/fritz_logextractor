@@ -5,6 +5,7 @@ import json
 import logging
 import sys
 import threading
+from pathlib import Path
 
 from fritzlogextractor.config import ConfigError, ExtractorConfig, get_config
 from fritzlogextractor.extractor import DeviceExtractor, ExtractionError
@@ -28,6 +29,12 @@ def parse_cmdline(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--once", action="store_true", help="Read each device once, print its log and exit"
+    )
+    parser.add_argument(
+        "--capture",
+        type=Path,
+        metavar="DIR",
+        help="Also store each raw event log snapshot below DIR, unredacted (for test data)",
     )
     parser.add_argument("--version", action="version", version=__version__)
     return parser.parse_args(argv)
@@ -55,7 +62,9 @@ def main(argv: list[str] | None = None) -> None:
     logger.info(
         "Configured %d device(s), polling every %ds", len(config.devices), config.poll_interval
     )
-    run(config, once=args.once)
+    if args.capture:
+        logger.warning("Storing unredacted event log snapshots below %s", args.capture)
+    run(config, once=args.once, capture_dir=args.capture)
 
 
 def poll_all(extractors: list[DeviceExtractor]) -> None:
@@ -72,9 +81,13 @@ def poll_all(extractors: list[DeviceExtractor]) -> None:
 
 
 def run(
-    config: ExtractorConfig, *, once: bool = False, stop: threading.Event | None = None
+    config: ExtractorConfig,
+    *,
+    once: bool = False,
+    stop: threading.Event | None = None,
+    capture_dir: Path | None = None,
 ) -> None:
-    extractors = [DeviceExtractor(device) for device in config.devices]
+    extractors = [DeviceExtractor(device, capture_dir) for device in config.devices]
     stop = stop or threading.Event()
     while True:
         poll_all(extractors)

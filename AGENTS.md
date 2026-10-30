@@ -57,7 +57,9 @@ Records the design agreed when the project was started (October 2026).
 
 **Built (PoC):** `eventlog.py` (strict parser, in-memory tracker keyed on time + message,
 POSIX time zone rules, output record; adapted from fritz_exporter PR #719), `extractor.py` (fetch
-per device through fritzconnection's session), poll loop with `--once` in `__main__.py`.
+per device through fritzconnection's session), poll loop with `--once` in `__main__.py`,
+`capture.py` (`--capture DIR`: raw snapshots plus uptime per poll, to build test data from real
+boxes).
 
 **Missing:** state file, reboot detection, handling of pre-sync timestamps, identity by position
 instead of time (below), remote access, tests against a real box.
@@ -105,6 +107,8 @@ instead of time (below), remote access, tests against a real box.
 
 ### Out of scope
 
+- No native outputs for log stacks (Loki, Elasticsearch, …). Stdout is the interface; collectors
+  pick it up from the container or journal. journald and syslog may come later, low priority.
 - No metrics: event counters belong in fritz_exporter, if anywhere.
 - No TLS certificate verification yet (Fritz!Box certs are self-signed); see
   fritz_exporter issue #736.

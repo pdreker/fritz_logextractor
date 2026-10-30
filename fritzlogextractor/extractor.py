@@ -15,6 +15,7 @@ from fritzconnection.core.exceptions import (  # type: ignore[import]
 )
 from requests.exceptions import RequestException
 
+from fritzlogextractor.capture import SnapshotCapture
 from fritzlogextractor.eventlog import (
     EventLogParseError,
     EventLogTracker,
@@ -46,10 +47,11 @@ class DeviceExtractor:
     whole buffer of the box is emitted once more.
     """
 
-    def __init__(self, config: DeviceConfig) -> None:
+    def __init__(self, config: DeviceConfig, capture_dir: Path | None = None) -> None:
         self.config = config
         self.name = config.name or config.hostname
         self.tracker = EventLogTracker()
+        self.capture = SnapshotCapture(capture_dir, self.name) if capture_dir else None
         self._fc: FritzConnection | None = None
 
     def _connection(self) -> FritzConnection:
@@ -87,11 +89,27 @@ class DeviceExtractor:
             current = None
         return info.get("NewLocalTimeZoneName"), current
 
+    def _capture(self, fc: FritzConnection, body: bytes) -> None:
+        if self.capture is None:
+            return
+        try:
+            info = fc.call_action("DeviceInfo1", "GetInfo")
+        except FritzServiceError, FritzActionError, FritzConnectionException, RequestException:
+            logger.debug("No device info from %s, capturing without uptime", self.name)
+            info = {}
+        try:
+            self.capture.record(body, info)
+        except OSError as e:
+            logger.warning("%s: could not store the snapshot (%s)", self.name, e)
+
     def poll(self) -> list[dict[str, Any]]:
         """Return the records of all entries not emitted before, oldest first."""
         try:
             fc = self._connection()
-            parsed = parse_event_log(self._fetch(fc))
+            body = self._fetch(fc)
+            # Capture before parsing, so a body the parser rejects is kept too.
+            self._capture(fc, body)
+            parsed = parse_event_log(body)
         except (FritzConnectionException, RequestException, KeyError) as e:
             self._fc = None
             msg = f"could not read the event log ({type(e).__name__})"

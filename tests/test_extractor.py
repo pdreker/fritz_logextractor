@@ -32,7 +32,9 @@ def response(body: bytes, status: int = 200) -> MagicMock:
     return resp
 
 
-def setup_fc(mock_fc_cls: MagicMock, *bodies: bytes, time_info=None) -> MagicMock:
+def setup_fc(
+    mock_fc_cls: MagicMock, *bodies: bytes, time_info=None, device_info=None
+) -> MagicMock:
     fc = mock_fc_cls.return_value
     fc.address = "http://fritz.box"
     fc.port = 49000
@@ -44,6 +46,10 @@ def setup_fc(mock_fc_cls: MagicMock, *bodies: bytes, time_info=None) -> MagicMoc
             if time_info is None:
                 raise FritzActionError("no time")
             return time_info
+        if action == "GetInfo" and device_info is not None:
+            return device_info
+        if action == "GetInfo":
+            raise FritzActionError("no info")
         raise AssertionError(f"unexpected {service} {action}")
 
     fc.call_action.side_effect = call_action
@@ -145,6 +151,76 @@ class TestDeviceExtractor:
         assert mock_fc_cls.call_count == 2
 
 
+INFO = {"NewUpTime": 3600, "NewModelName": "FRITZ!Box 7690", "NewSoftwareVersion": "8.25"}
+
+
+def read_polls(directory):
+    return [json.loads(line) for line in (directory / "polls.jsonl").read_text().splitlines()]
+
+
+@patch("fritzlogextractor.extractor.FritzConnection")
+class TestCapture:
+    def test_each_poll_is_logged_and_each_distinct_body_stored_once(self, mock_fc_cls, tmp_path):
+        first, second = log_xml(CONNECTED), log_xml(LOGIN, CONNECTED)
+        setup_fc(mock_fc_cls, first, first, second, device_info=INFO)
+        extractor = DeviceExtractor(device(name="Fritz!Box 7690"), tmp_path)
+
+        for _ in range(3):
+            extractor.poll()
+
+        directory = tmp_path / "Fritz_Box_7690"
+        polls = read_polls(directory)
+        assert [p["uptime"] for p in polls] == [3600] * 3
+        assert polls[0]["model"] == "FRITZ!Box 7690"
+        assert polls[0]["firmware"] == "8.25"
+        assert polls[0]["file"] == polls[1]["file"] != polls[2]["file"]
+        assert (directory / polls[0]["file"]).read_bytes() == first
+        assert (directory / polls[2]["file"]).read_bytes() == second
+        assert sorted(f.name for f in directory.iterdir() if f.suffix == ".xml") == sorted(
+            {p["file"] for p in polls}
+        )
+
+    def test_files_are_private(self, mock_fc_cls, tmp_path):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=INFO)
+
+        DeviceExtractor(device(), tmp_path).poll()
+
+        directory = tmp_path / "Box"
+        assert directory.stat().st_mode & 0o777 == 0o700
+        assert {f.stat().st_mode & 0o777 for f in directory.iterdir()} == {0o600}
+
+    def test_body_the_parser_rejects_is_kept(self, mock_fc_cls, tmp_path):
+        setup_fc(mock_fc_cls, b"<html>login</html>", device_info=INFO)
+
+        with pytest.raises(ExtractionError):
+            DeviceExtractor(device(), tmp_path).poll()
+
+        polls = read_polls(tmp_path / "Box")
+        assert (tmp_path / "Box" / polls[0]["file"]).read_bytes() == b"<html>login</html>"
+
+    def test_missing_device_info_is_logged_as_null(self, mock_fc_cls, tmp_path):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED))
+
+        DeviceExtractor(device(), tmp_path).poll()
+
+        assert read_polls(tmp_path / "Box")[0]["uptime"] is None
+
+    def test_storage_error_does_not_stop_extraction(self, mock_fc_cls, tmp_path, caplog):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=INFO)
+        blocked = tmp_path / "file"
+        blocked.write_text("")
+
+        assert len(DeviceExtractor(device(), blocked).poll()) == 1
+        assert "Box: could not store the snapshot" in caplog.text
+
+    def test_without_capture_dir_no_device_info_is_read(self, mock_fc_cls):
+        fc = setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=INFO)
+
+        DeviceExtractor(device()).poll()
+
+        assert all(c.args[:2] != ("DeviceInfo1", "GetInfo") for c in fc.call_action.call_args_list)
+
+
 @patch("fritzlogextractor.extractor.FritzConnection")
 class TestMain:
     def test_poll_all_prints_json_lines_and_keeps_going_on_errors(self, mock_fc_cls, capsys, caplog):
@@ -166,3 +242,11 @@ class TestMain:
 
         lines = capsys.readouterr().out.splitlines()
         assert [json.loads(line)["device"] for line in lines] == ["Fritz!Box 7590", "Repeater"]
+
+    def test_capture_option_stores_snapshots_per_device(self, mock_fc_cls, tmp_path, capsys):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(LOGIN), device_info=INFO)
+
+        main(["--config", "tests/conffiles/validconfig.yaml", "--once", "--capture", str(tmp_path)])
+
+        assert len(capsys.readouterr().out.splitlines()) == 2
+        assert sorted(d.name for d in tmp_path.iterdir()) == ["Fritz_Box_7590", "Repeater"]
