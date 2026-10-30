@@ -29,6 +29,10 @@ class FritzPasswordFileDoesNotExistError(ConfigError):
     pass
 
 
+class UnknownConfigKeyError(ConfigError):
+    pass
+
+
 # Copyright 2026 Patrick Dreker <patrick@dreker.de>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

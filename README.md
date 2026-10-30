@@ -36,7 +36,7 @@ fritzlogextractor                 # keep polling, print new entries as they appe
 Events go to stdout, one JSON object per line; the tool's own messages go to stderr:
 
 ```json
-{"event_time": "2026-10-09T08:31:57+02:00", "device": "Fritz!Box", "host": "fritz.box", "group": "net", "id": 22, "msg": "Internetverbindung wurde erfolgreich hergestellt. ..."}
+{"event_time": "2026-10-09T08:31:57+02:00", "device": "fritz.box", "host": "fritz.box", "group": "net", "id": 22, "msg": "Internetverbindung wurde erfolgreich hergestellt. ..."}
 ```
 
 `id` is the message type and does not depend on the box's language; `msg` is localized. DynDNS
@@ -123,8 +123,9 @@ devices:
 ```
 
 Only `username` and one of `password` or `password_file` are required per device; every other
-key falls back to the defaults below. The tool does not check for unknown keys, so a misspelled
-key goes unnoticed and its default applies. A file read with `password_file` may end in a
+key falls back to the defaults below. An unknown key, such as a typo, stops the tool with an
+error that names the closest known key. This also means a config file of fritz_exporter does not
+work here: give each tool its own file. A file read with `password_file` may end in a
 newline; the tool strips it.
 
 ### Environment variables
@@ -143,7 +144,7 @@ fritzlogextractor
 | `poll_interval` | `FRITZ_POLL_INTERVAL` | `60` (seconds, at least 10) |
 | `state_dir` | `FRITZ_STATE_DIR` | `/var/lib/fritzlogextractor` (not used yet) |
 | `devices[].hostname` | `FRITZ_HOSTNAME` | `fritz.box` |
-| `devices[].name` | `FRITZ_NAME` | the hostname (file), `Fritz!Box` (env) |
+| `devices[].name` | `FRITZ_NAME` | the hostname |
 | `devices[].username` | `FRITZ_USERNAME` | *(required)* |
 | `devices[].password` | `FRITZ_PASSWORD` | *(required unless password_file is set)* |
 | `devices[].password_file` | `FRITZ_PASSWORD_FILE` | |
