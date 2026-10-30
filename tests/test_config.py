@@ -7,6 +7,7 @@ from fritzlogextractor.config import (
     FritzPasswordMissingError,
     FritzPasswordTooLongError,
     NoDevicesFoundError,
+    UnknownConfigKeyError,
     get_config,
 )
 from fritzlogextractor.config.config import DEFAULT_POLL_INTERVAL, DEFAULT_STATE_DIR, ExtractorConfig
@@ -52,6 +53,35 @@ class TestFileConfig:
             ExtractorConfig.from_config({"devices": [device], "poll_interval": 5})
 
 
+    def test_name_defaults_to_the_hostname(self):
+        device = {"hostname": "Fritz.Repeater", "username": "u", "password": "p"}
+
+        config = ExtractorConfig.from_config({"devices": [device]})
+
+        assert config.devices[0].name == "fritz.repeater"
+
+    def test_unknown_device_key_is_an_error_with_a_suggestion(self):
+        device = {"hostname": "fritz.box", "username": "u", "pasword": "p"}
+        with pytest.raises(
+            UnknownConfigKeyError,
+            match=r"^device 1 \(fritz.box\): unknown key 'pasword', did you mean 'password'\?$",
+        ):
+            ExtractorConfig.from_config({"devices": [device]})
+
+    def test_unknown_top_level_key_is_an_error_with_a_suggestion(self):
+        device = {"username": "u", "password": "p"}
+        with pytest.raises(
+            UnknownConfigKeyError,
+            match=r"^config: unknown key 'poll_intervall', did you mean 'poll_interval'\?$",
+        ):
+            ExtractorConfig.from_config({"devices": [device], "poll_intervall": 10})
+
+    def test_unknown_key_without_close_match(self):
+        device = {"username": "u", "password": "p", "colour": "blue"}
+        with pytest.raises(UnknownConfigKeyError, match=r"^device 1: unknown key 'colour'$"):
+            ExtractorConfig.from_config({"devices": [device]})
+
+
 class TestEnvConfig:
     def test_minimal_env(self, monkeypatch):
         monkeypatch.setenv("FRITZ_USERNAME", "logreader")
@@ -63,13 +93,14 @@ class TestEnvConfig:
         assert config.state_dir == DEFAULT_STATE_DIR
         dev = config.devices[0]
         assert dev.hostname == "fritz.box"
-        assert dev.name == "Fritz!Box"
+        assert dev.name == "fritz.box"
         assert dev.use_tls is False
 
     def test_full_env(self, monkeypatch):
         monkeypatch.setenv("FRITZ_USERNAME", "logreader")
         monkeypatch.setenv("FRITZ_PASSWORD", "secret")
         monkeypatch.setenv("FRITZ_HOSTNAME", "192.168.178.1")
+        monkeypatch.setenv("FRITZ_NAME", "Keller")
         monkeypatch.setenv("FRITZ_USE_TLS", "true")
         monkeypatch.setenv("FRITZ_CONNECTION_TIMEOUT", "5")
         monkeypatch.setenv("FRITZ_POLL_INTERVAL", "120")
@@ -82,6 +113,7 @@ class TestEnvConfig:
         assert config.state_dir == "/data"
         assert config.log_level == "WARNING"
         assert config.devices[0].hostname == "192.168.178.1"
+        assert config.devices[0].name == "Keller"
         assert config.devices[0].use_tls is True
         assert config.devices[0].connection_timeout == 5
 

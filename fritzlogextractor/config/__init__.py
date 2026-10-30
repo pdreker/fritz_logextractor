@@ -7,6 +7,7 @@ from .exceptions import (
     FritzPasswordMissingError,
     FritzPasswordTooLongError,
     NoDevicesFoundError,
+    UnknownConfigKeyError,
 )
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "FritzPasswordMissingError",
     "FritzPasswordTooLongError",
     "NoDevicesFoundError",
+    "UnknownConfigKeyError",
     "get_config",
 ]
 

@@ -49,7 +49,7 @@ class DeviceExtractor:
 
     def __init__(self, config: DeviceConfig, capture_dir: Path | None = None) -> None:
         self.config = config
-        self.name = config.name or config.hostname
+        self.name = config.name
         self.tracker = EventLogTracker()
         self.capture = SnapshotCapture(capture_dir, self.name) if capture_dir else None
         self._fc: FritzConnection | None = None

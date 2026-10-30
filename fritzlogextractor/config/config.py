@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import logging
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ from .exceptions import (
     FritzPasswordMissingError,
     FritzPasswordTooLongError,
     NoDevicesFoundError,
+    UnknownConfigKeyError,
 )
 
 logger = logging.getLogger("fritzlogextractor.config")
@@ -60,7 +62,6 @@ def _read_config_from_env() -> dict[str, Any]:
             config[key] = value
 
     device: dict[str, Any] = {
-        "name": os.getenv("FRITZ_NAME", "Fritz!Box"),
         "username": os.getenv("FRITZ_USERNAME", ""),
         "password": os.getenv("FRITZ_PASSWORD"),
         "password_file": os.getenv("FRITZ_PASSWORD_FILE"),
@@ -68,6 +69,7 @@ def _read_config_from_env() -> dict[str, Any]:
     }
     for key, env in (
         ("hostname", "FRITZ_HOSTNAME"),
+        ("name", "FRITZ_NAME"),
         ("connection_timeout", "FRITZ_CONNECTION_TIMEOUT"),
     ):
         value = os.getenv(env)
@@ -77,6 +79,17 @@ def _read_config_from_env() -> dict[str, Any]:
 
     logger.info("No configuration file specified: configuration read from environment")
     return config
+
+
+def _check_keys(config: dict[str, Any], cls: type, where: str) -> None:
+    """Refuse keys the config class does not have: a typo would go unnoticed."""
+    known = [a.name for a in attrs.fields(cls)]
+    for key in config:
+        if key not in known:
+            close = difflib.get_close_matches(str(key), known, n=1)
+            hint = f", did you mean '{close[0]}'?" if close else ""
+            msg = f"{where}: unknown key '{key}'{hint}"
+            raise UnknownConfigKeyError(msg)
 
 
 def get_config(config_file_path: str | None) -> ExtractorConfig:
@@ -90,6 +103,7 @@ class DeviceConfig:
     username: str = field(validator=validators.min_len(1))
     password: str | None = field(default=None)
     password_file: str | None = field(default=None)
+    # Defaults to the hostname.
     name: str = ""
     connection_timeout: int | None = field(
         default=DEFAULT_CONNECTION_TIMEOUT,
@@ -113,8 +127,16 @@ class DeviceConfig:
             msg = "Either password or password_file must be set."
             raise FritzPasswordMissingError(msg)
 
+    def __attrs_post_init__(self) -> None:
+        if not self.name:
+            self.name = self.hostname
+
     @classmethod
-    def from_config(cls, device: dict[str, Any]) -> DeviceConfig:
+    def from_config(cls, device: dict[str, Any], where: str = "device") -> DeviceConfig:
+        hostname = device.get("hostname")
+        if isinstance(hostname, str) and hostname:
+            where = f"{where} ({hostname})"
+        _check_keys(device, cls, where)
         return cls(
             hostname=device.get("hostname", "fritz.box"),
             username=device.get("username", ""),
@@ -148,8 +170,12 @@ class ExtractorConfig:
         if config is None:
             msg = "No config found (check env vars or config file)."
             raise EmptyConfigError(msg)
+        _check_keys(config, cls, "config")
         return cls(
-            devices=[DeviceConfig.from_config(dev) for dev in config.get("devices") or []],
+            devices=[
+                DeviceConfig.from_config(dev, f"device {n}")
+                for n, dev in enumerate(config.get("devices") or [], start=1)
+            ],
             log_level=config.get("log_level", "INFO"),
             poll_interval=config.get("poll_interval", DEFAULT_POLL_INTERVAL),
             state_dir=config.get("state_dir", DEFAULT_STATE_DIR),
