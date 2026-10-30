@@ -10,7 +10,9 @@
 > - **No reboot detection** and no special handling of the bogus timestamps a box logs before
 >   its clock is synced.
 > - **Entries are lost** if the box reboots between two polls.
-> - Tested with unit tests only, not yet against a real box. Remote access is not supported.
+> - Tested against one real box only: v0.1.0 read the log of a FRITZ!Box 6660 Cable on
+>   FRITZ!OS 8.25 (`--once`, 104 entries in the groups `sys`, `net` and `wlan`). Remote access is
+>   not supported.
 >
 > The planned design is in [AGENTS.md](AGENTS.md).
 
