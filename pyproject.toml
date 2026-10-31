@@ -30,6 +30,10 @@ fritzlogextractor = "fritzlogextractor.__main__:main"
 
 [dependency-groups]
 dev = [{include-group = "lint"}, {include-group = "test"}]
+docs = [
+    "mike>=2.2.0",
+    "mkdocs-material>=9.8.0",
+]
 lint = ["ruff>=0.1.7", "ty"]
 test = [
     "pytest",

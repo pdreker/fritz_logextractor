@@ -1,0 +1,55 @@
+site_name: fritz_logextractor
+site_description: Forward the event log of AVM Fritz! devices as structured log lines
+site_url: https://pdreker.github.io/fritz_logextractor/
+repo_url: https://github.com/pdreker/fritz_logextractor
+repo_name: pdreker/fritz_logextractor
+edit_uri: edit/main/docs/
+copyright: Copyright 2026 Patrick Dreker and Rafael Kansy, Apache License 2.0
+
+nav:
+  - Home: index.md
+  - Running: running.md
+  - Configuration: configuration.md
+  - Output: output.md
+  - Capturing snapshots: capture.md
+  - Development: development.md
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.footer
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+extra:
+  version:
+    provider: mike
+    default: latest
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+validation:
+  links:
+    absolute_links: relative_to_docs
+    anchors: warn
