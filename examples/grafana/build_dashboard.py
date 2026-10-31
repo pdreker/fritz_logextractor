@@ -137,7 +137,7 @@ def stat(
     unit: str = "none",
     decimals: int | None = 0,
     steps: dict | None = None,
-    text_mode: str = "value_and_name",
+    text_mode: str = "auto",
 ) -> Panel:
     defaults: dict[str, Any] = {
         "unit": unit,
@@ -177,6 +177,8 @@ def timeseries(
     colors: dict[str, str] | None = None,
     steps: dict | None = None,
     min_interval: str | None = None,
+    max_points: int | None = None,
+    no_value: str | None = None,
 ) -> Panel:
     custom: dict[str, Any] = {
         "drawStyle": "bars" if bars else "line",
@@ -192,6 +194,8 @@ def timeseries(
         "color": {"mode": "palette-classic"},
         "custom": custom,
     }
+    if no_value:
+        defaults["noValue"] = no_value
     if steps:
         # A dashed line at the threshold, the series keep their color.
         defaults["thresholds"] = steps
@@ -210,6 +214,9 @@ def timeseries(
     }
     if min_interval:
         panel["interval"] = min_interval
+    if max_points:
+        # Fewer, wider buckets: a box logs a few lines an hour.
+        panel["maxDataPoints"] = max_points
     return panel
 
 
@@ -372,7 +379,7 @@ def status(layout: Layout) -> None:
             "Time since the last poll that read the log and wrote its events.",
             prom(f"time() - fritzlogextractor_last_success_timestamp_seconds{{{DEV}}}", now=True),
             unit="s",
-            steps=thresholds((None, "green"), (180, "orange"), (STALLED_AFTER, "red")),
+            steps=thresholds((None, "text"), (0, "green"), (180, "orange"), (STALLED_AFTER, "red")),
         ),
         3,
         4,
@@ -423,7 +430,7 @@ def status(layout: Layout) -> None:
             "Rows of the last poll that failed validation. They are not emitted; the tool's log "
             "shows the first one.",
             prom(f"fritzlogextractor_rejected_rows{{{DEV}}}", now=True),
-            steps=thresholds((None, "green"), (1, "red")),
+            steps=thresholds((None, "text"), (0, "green"), (1, "red")),
         ),
         3,
         4,
@@ -438,7 +445,7 @@ def status(layout: Layout) -> None:
                 f"fritzlogextractor_state_write_errors_total{{{DEV}}}[$__range])))",
                 now=True,
             ),
-            steps=thresholds((None, "green"), (1, "red")),
+            steps=thresholds((None, "text"), (0, "green"), (1, "red")),
         ),
         3,
         4,
@@ -463,7 +470,7 @@ def status(layout: Layout) -> None:
             "box logged in that time is lost.",
             prom(f"fritzlogextractor_reboot_unwatched_seconds{{{DEV}}}", now=True),
             unit="s",
-            steps=thresholds((None, "green"), (180, "orange"), (STALLED_AFTER, "red")),
+            steps=thresholds((None, "text"), (0, "green"), (180, "orange"), (STALLED_AFTER, "red")),
         ),
         2,
         4,
@@ -512,6 +519,7 @@ def polling(layout: Layout) -> None:
             stacked=True,
             colors=REASON_COLORS,
             min_interval="1m",
+            no_value="No failed polls",
         ),
         8,
         8,
@@ -539,6 +547,7 @@ def events(layout: Layout) -> None:
             stacked=True,
             colors=GROUP_COLORS,
             min_interval="1m",
+            max_points=100,
         ),
         16,
         8,
@@ -587,7 +596,7 @@ def events(layout: Layout) -> None:
             "all its fields. Filter with Device, Group, Message id and Search above.",
             loki(
                 f'{EVENTS} {EVENT_FIELDS} | id=~"$id" |~ `(?i)${{search:regex}}` '
-                '| line_format "[{{.group}} {{.id}}] {{.msg}}'
+                '| label_format level="info" | line_format "[{{.group}} {{.id}}] {{.msg}}'
                 '{{ if ne .repeat \\"1\\" }} (\u00d7{{.repeat}}){{ end }}"'
             ),
         ),
