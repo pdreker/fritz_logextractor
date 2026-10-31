@@ -901,6 +901,10 @@ memory only and prints the whole log again on every start.</p>
 <td>Override the log level from the configuration</td>
 </tr>
 <tr>
+<td><code>--log-format FORMAT</code></td>
+<td>Format of the tool's own log lines on stderr: <code>json</code> (default) or <code>text</code> for reading in a terminal</td>
+</tr>
+<tr>
 <td><code>--capture DIR</code></td>
 <td>Also store the raw log of each poll, see <a href="../capture/">Capturing snapshots</a></td>
 </tr>
@@ -913,15 +917,14 @@ memory only and prints the whole log again on every start.</p>
 <p><code>--once</code> uses the state file as well, so a run from cron prints only what came since the last
 run.</p>
 <h2 id="keeping-events-and-diagnostics-apart">Keeping events and diagnostics apart<a class="headerlink" href="#keeping-events-and-diagnostics-apart" title="Permanent link">&para;</a></h2>
-<p>In a terminal, stdout and stderr show up together. Send them to different places to keep the
-events clean:</p>
-<div class="highlight"><pre><span></span><code>fritzlogextractor<span class="w"> </span>--config<span class="w"> </span>config.yaml<span class="w"> </span>&gt;<span class="w"> </span>events.jsonl<span class="w">      </span><span class="c1"># events to a file, diagnostics on screen</span>
-fritzlogextractor<span class="w"> </span>--config<span class="w"> </span>config.yaml<span class="w"> </span><span class="m">2</span>&gt;<span class="w"> </span>extractor.log<span class="w">    </span><span class="c1"># diagnostics to a file</span>
+<p>Events go to stdout, the tool's own log lines to stderr. Both are JSON lines with a <code>kind</code> field,
+<code>event</code> or <code>log</code>, so they can be told apart even where the two streams end up mixed, as in a
+container's log or a terminal. A log stack keeps the lines with <code>"kind": "event"</code> as the box's
+log and the rest as the tool's own; see <a href="../output/#own-log-lines">Output</a>.</p>
+<p>In a terminal, the classic format is easier to read, and redirecting keeps the events apart:</p>
+<div class="highlight"><pre><span></span><code>fritzlogextractor<span class="w"> </span>--config<span class="w"> </span>config.yaml<span class="w"> </span>--log-format<span class="w"> </span>text<span class="w"> </span>&gt;<span class="w"> </span>events.jsonl<span class="w">   </span><span class="c1"># events to a file</span>
+fritzlogextractor<span class="w"> </span>--config<span class="w"> </span>config.yaml<span class="w"> </span>--log-format<span class="w"> </span>text<span class="w"> </span><span class="m">2</span>&gt;<span class="w"> </span>tool.log<span class="w">      </span><span class="c1"># own log to a file</span>
 </code></pre></div>
-<p>Container runtimes keep the two apart as well: Docker's <code>json-file</code> log driver and the CRI log
-format of Kubernetes record for each line whether it came from stdout or stderr, and log
-collectors such as Grafana Alloy, Promtail, Fluent Bit or Vector can filter on that. Collect
-stdout as events and treat stderr as the tool's own log.</p>
 
 
 

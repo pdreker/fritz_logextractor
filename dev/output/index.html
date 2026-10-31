@@ -460,6 +460,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#own-log-lines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Own log lines
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#own-logins" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -614,6 +625,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#own-log-lines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Own log lines
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#own-logins" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -645,9 +667,10 @@
 
 
 <h1 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h1>
-<p>Each new log entry becomes one JSON object on one line of stdout. The tool's own messages go to
-stderr.</p>
-<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">"event_time"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-10-09T08:31:57+02:00"</span><span class="p">,</span><span class="w"> </span><span class="nt">"time_estimated"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"> </span><span class="nt">"box_time"</span><span class="p">:</span><span class="w"> </span><span class="s2">"09.10.26 08:31:57"</span><span class="p">,</span><span class="w"> </span><span class="nt">"device"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fritz.box"</span><span class="p">,</span><span class="w"> </span><span class="nt">"host"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fritz.box"</span><span class="p">,</span><span class="w"> </span><span class="nt">"serial"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="p">,</span><span class="w"> </span><span class="nt">"group"</span><span class="p">:</span><span class="w"> </span><span class="s2">"net"</span><span class="p">,</span><span class="w"> </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">22</span><span class="p">,</span><span class="w"> </span><span class="nt">"msg"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Internetverbindung wurde erfolgreich hergestellt. ..."</span><span class="p">,</span><span class="w"> </span><span class="nt">"repeat"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">}</span>
+<p>Each new log entry becomes one JSON object on one line of stdout, marked <code>"kind": "event"</code>. The
+tool's own messages go to stderr, also as JSON lines but marked <code>"kind": "log"</code>, see
+<a href="#own-log-lines">Own log lines</a>.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"event"</span><span class="p">,</span><span class="w"> </span><span class="nt">"event_time"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-10-09T08:31:57+02:00"</span><span class="p">,</span><span class="w"> </span><span class="nt">"time_estimated"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"> </span><span class="nt">"box_time"</span><span class="p">:</span><span class="w"> </span><span class="s2">"09.10.26 08:31:57"</span><span class="p">,</span><span class="w"> </span><span class="nt">"device"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fritz.box"</span><span class="p">,</span><span class="w"> </span><span class="nt">"host"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fritz.box"</span><span class="p">,</span><span class="w"> </span><span class="nt">"serial"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="p">,</span><span class="w"> </span><span class="nt">"group"</span><span class="p">:</span><span class="w"> </span><span class="s2">"net"</span><span class="p">,</span><span class="w"> </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">22</span><span class="p">,</span><span class="w"> </span><span class="nt">"msg"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Internetverbindung wurde erfolgreich hergestellt. ..."</span><span class="p">,</span><span class="w"> </span><span class="nt">"repeat"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">}</span>
 </code></pre></div>
 <h2 id="fields">Fields<a class="headerlink" href="#fields" title="Permanent link">&para;</a></h2>
 <table>
@@ -658,6 +681,10 @@ stderr.</p>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>kind</code></td>
+<td>Always <code>event</code>; the tool's own log lines say <code>log</code></td>
+</tr>
 <tr>
 <td><code>event_time</code></td>
 <td>When it happened, ISO 8601 with the box's UTC offset (without one if the box does not tell its time zone)</td>
@@ -717,6 +744,48 @@ own yet, <code>event_time</code> is in UTC.</p>
 <p>A FRITZ!Box that is mesh master also shows the log of its repeaters, as rows starting with
 <code>[fritz.repeater]</code>. Polling the box is enough; polling the repeaters as well gives their entries
 twice.</p>
+<h2 id="own-log-lines">Own log lines<a class="headerlink" href="#own-log-lines" title="Permanent link">&para;</a></h2>
+<p>The tool logs to stderr, by default as one JSON object per line:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">"time"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-10-31T16:30:51.485+00:00"</span><span class="p">,</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"log"</span><span class="p">,</span><span class="w"> </span><span class="nt">"level"</span><span class="p">:</span><span class="w"> </span><span class="s2">"INFO"</span><span class="p">,</span><span class="w"> </span><span class="nt">"logger"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fritzlogextractor"</span><span class="p">,</span><span class="w"> </span><span class="nt">"msg"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Configured 1 device(s), polling every 60s"</span><span class="p">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>time</code></td>
+<td>When it was logged, in UTC</td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td>Always <code>log</code></td>
+</tr>
+<tr>
+<td><code>level</code></td>
+<td><code>DEBUG</code>, <code>INFO</code>, <code>WARNING</code>, <code>ERROR</code> or <code>CRITICAL</code></td>
+</tr>
+<tr>
+<td><code>logger</code></td>
+<td>Which part logged it, e.g. <code>fritzlogextractor.extractor</code>, or a library such as <code>urllib3</code></td>
+</tr>
+<tr>
+<td><code>msg</code></td>
+<td>The message</td>
+</tr>
+<tr>
+<td><code>exc</code></td>
+<td>Only on errors with a traceback: the traceback, in the same line</td>
+</tr>
+</tbody>
+</table>
+<p>So a log stack that gets stdout and stderr mixed can still sort events and log lines apart on
+<code>kind</code>. For reading in a terminal, <code>--log-format text</code> switches to the classic format:</p>
+<div class="highlight"><pre><span></span><code>2026-10-31 17:30:51,485     INFO fritzlogextractor | Configured 1 device(s), polling every 60s
+</code></pre></div>
 <h2 id="own-logins">Own logins<a class="headerlink" href="#own-logins" title="Permanent link">&para;</a></h2>
 <p>Each login of the tool shows up in the log as "Anmeldung einer App" (<code>id</code> 506 or 507), once per
 session: at start and after connection errors.</p>
