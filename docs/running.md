@@ -6,9 +6,16 @@ not print the whole log again; give it a place where that file survives.
 
 ## Preparing the box
 
-Create a separate user on the Fritz!Box for the tool (*System → FRITZ!Box Users*), with a long
-random password of at most 32 characters: TR-064 logs in with MD5 digest authentication, and
-Fritz!OS accepts no longer passwords there. Give the user no more rights than it needs.
+Create a user on the Fritz!Box for the tool (*System → FRITZ!Box Users*, German *FRITZ!Box-Benutzer*),
+for example `logextractor`, and give it the right *FRITZ!Box settings* (*FRITZ!Box
+Einstellungen*). Fritz!OS has no finer rights for this; it is the same right fritz_exporter
+needs.
+
+You may reuse the user of fritz_exporter. A separate one lets you change or revoke either tool's
+access on its own, and the box's log tells their logins apart.
+
+Use a long random password of at most 32 characters: TR-064 logs in with MD5 digest
+authentication, and Fritz!OS accepts no longer passwords there.
 
 !!! tip "Mesh"
 
