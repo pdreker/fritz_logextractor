@@ -28,8 +28,16 @@ reboots.
 ## Dual Configuration
 
 YAML file (`--config`, several devices) **or** environment variables (one device), never merged.
-The mapping table is in `README.md`. **When adding an option, update both paths, both test
-classes in `tests/test_config.py`, and the README table.**
+The mapping table is in `docs/configuration.md`. **When adding an option, update both paths,
+both test classes in `tests/test_config.py`, and that table.**
+
+## Documentation
+
+User docs live in `docs/` (MkDocs with Material, versioned with mike on `gh-pages`); the README
+only introduces the tool and links there. Push to `main` publishes `dev` (`docs.yaml`), a
+release publishes `<major>.<minor>` as `latest` (`release.yaml`). CI runs
+`mkdocs build --strict` on every pull request. Write docs for users; the design and the
+findings from real boxes stay here.
 
 ## Linting, Testing
 

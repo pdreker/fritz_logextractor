@@ -58,3 +58,32 @@ jobs:
           context: .
           platforms: linux/arm/v6,linux/arm/v7,linux/amd64,linux/aarch64
           tags: ${{ steps.meta.outputs.tags }}
+
+  publish-docs-release:
+    needs: release
+    if: needs.release.outputs.release_created
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+      - name: Install dependencies
+        run: uv sync --only-group docs
+      - name: Publish
+        env:
+          VERSION: ${{ needs.release.outputs.major }}.${{ needs.release.outputs.minor }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages --depth=1 || true
+          uv run --only-group docs mike deploy --push --allow-empty --update-aliases "$VERSION" latest
+          uv run --only-group docs mike set-default --push latest

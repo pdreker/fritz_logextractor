@@ -28,3 +28,5 @@ jobs:
         run: uv run ty check
       - name: Run pytest
         run: uv run pytest
+      - name: Build docs
+        run: uv run mkdocs build --strict
