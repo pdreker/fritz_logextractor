@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/pdreker/fritz_logextractor/compare/fritzlogextractor-v0.2.0...fritzlogextractor-v0.2.1) (2026-10-31)
+
+
+### Documentation
+
+* note the first release in AGENTS.md ([#43](https://github.com/pdreker/fritz_logextractor/issues/43)) ([8a44591](https://github.com/pdreker/fritz_logextractor/commit/8a44591a807b7231f0fd488a63ef68823f47cc76))
+
 ## [0.2.0](https://github.com/pdreker/fritz_logextractor/compare/fritzlogextractor-v0.1.0...fritzlogextractor-v0.2.0) (2026-10-31)
 
 
