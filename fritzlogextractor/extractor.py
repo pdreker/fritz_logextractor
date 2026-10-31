@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from attrs import define
@@ -17,19 +16,21 @@ from fritzconnection.core.exceptions import (  # type: ignore[import]
 from requests.exceptions import RequestException
 
 from fritzlogextractor.capture import SnapshotCapture
+from fritzlogextractor.clock import BoxClock, is_pre_sync
+from fritzlogextractor.config import ConfigError
 from fritzlogextractor.eventlog import (
-    PRE_SYNC_EPOCH,
     EventLogParseError,
     ParsedEventLog,
+    Source,
     event_record,
     parse_event_log,
-    resolve_utc_offset,
-    with_offset,
 )
 from fritzlogextractor.state import StateFile
-from fritzlogextractor.tracker import EventLogTracker, NewEntry
+from fritzlogextractor.tracker import EventLogTracker
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from fritzlogextractor.config import DeviceConfig
 
 logger = logging.getLogger("fritzlogextractor.extractor")
@@ -37,16 +38,21 @@ logger = logging.getLogger("fritzlogextractor.extractor")
 _MAX_REJECT_REPR = 80
 # A full log is about 125 kB on a 7690.
 _MAX_LOG_BYTES = 8 * 1024 * 1024
+_CHUNK_BYTES = 64 * 1024
+# Errors of the TR-064 connection; the next poll opens a new one.
+_CONNECTION_ERRORS = (FritzConnectionException, RequestException)
 
 
 class ExtractionError(Exception):
     """The log of a device could not be read this round; the text is safe to log."""
 
 
-def _password(config: DeviceConfig) -> str:
-    if config.password_file is not None:
-        return Path(config.password_file).read_text().strip()
-    return config.password or ""
+@define(frozen=True)
+class _Snapshot:
+    """What :meth:`DeviceExtractor.commit` records as emitted."""
+
+    parsed: ParsedEventLog
+    clock: BoxClock
 
 
 class DeviceExtractor:
@@ -61,9 +67,9 @@ class DeviceExtractor:
     ) -> None:
         self.config = config
         self.name = config.name
-        self.tracker = EventLogTracker()
-        self.state = StateFile(state_dir, config.hostname) if state_dir else None
-        self.capture = SnapshotCapture(capture_dir, self.name) if capture_dir else None
+        self._tracker = EventLogTracker()
+        self._state = StateFile(state_dir, config.hostname) if state_dir else None
+        self._capture = SnapshotCapture(capture_dir, self.name) if capture_dir else None
         self._fc: FritzConnection | None = None
         self._serial: str | None = None
         self._state_loaded = False
@@ -71,12 +77,63 @@ class DeviceExtractor:
         self._pending: _Snapshot | None = None
         self._rejected_seen: set[str] = set()
 
+    def poll(self) -> list[dict[str, Any]]:
+        """Return the records of all occurrences not emitted before, oldest first."""
+        body, info, uptime = self._read()
+        now = datetime.now(UTC)
+        self._store_snapshot(body, info)
+        parsed = self._parse(body)
+        self._serial = info.get("NewSerialNumber")
+        self._load_state()
+        clock = self._clock(now, uptime)
+        if self._tracker.boot is not None and not self._tracker.is_same_boot(clock.boot):
+            logger.info("%s has restarted, its whole log is new", self.name)
+
+        source = Source(self.name, self.config.hostname, self._serial)
+        new = self._tracker.new_entries(parsed.events, clock.boot, clock.box_boot)
+        self._pending = _Snapshot(parsed, clock)
+        return [event_record(e.event, clock.event_time(e.event), e.repeat, source) for e in new]
+
+    def commit(self) -> None:
+        """Record the snapshot of the last :meth:`poll` as emitted."""
+        if self._pending is None:
+            return
+        parsed, clock = self._pending.parsed, self._pending.clock
+        self._pending = None
+        self._tracker.commit(parsed.events, clock.boot, clock.box_boot)
+        self._warn_rejected(parsed)
+        self._save_state()
+
+    # --- Reading from the box ----------------------------------------------------------------
+
+    def _read(self) -> tuple[bytes, dict[str, Any], int]:
+        """The raw log, ``DeviceInfo1:GetInfo`` and the uptime from it; all are required."""
+        try:
+            fc = self._connection()
+            body = self._fetch(fc)
+            info = fc.call_action("DeviceInfo1", "GetInfo")
+            uptime = int(info["NewUpTime"])
+        except ExtractionError as e:
+            self._store_failure(str(e))
+            raise
+        except (*_CONNECTION_ERRORS, KeyError, TypeError, ValueError) as e:
+            self._fc = None
+            msg = f"could not read the event log ({type(e).__name__})"
+            self._store_failure(msg)
+            raise ExtractionError(msg) from None
+        return body, info, uptime
+
     def _connection(self) -> FritzConnection:
         if self._fc is None:
+            try:
+                password = self.config.read_password()
+            except (OSError, ConfigError) as e:
+                msg = f"could not read the password ({e})"
+                raise ExtractionError(msg) from None
             self._fc = FritzConnection(
                 address=self.config.hostname,
                 user=self.config.username,
-                password=_password(self.config),
+                password=password,
                 timeout=self.config.connection_timeout,
                 use_tls=self.config.use_tls,
             )
@@ -98,144 +155,62 @@ class DeviceExtractor:
                 msg = f"HTTP {response.status_code}"
                 raise ExtractionError(msg)
             body = bytearray()
-            for chunk in response.iter_content(chunk_size=64 * 1024):
+            for chunk in response.iter_content(chunk_size=_CHUNK_BYTES):
                 body += chunk
                 if len(body) > _MAX_LOG_BYTES:
                     msg = f"event log larger than {_MAX_LOG_BYTES} bytes"
                     raise ExtractionError(msg)
         return bytes(body)
 
-    def _time_info(
-        self, fc: FritzConnection
-    ) -> tuple[str | None, timedelta | None, datetime | None]:
-        """Time zone rule, current UTC offset and current box-local time (``None`` before sync)."""
+    def _parse(self, body: bytes) -> ParsedEventLog:
         try:
-            info = fc.call_action("Time1", "GetInfo")
-        except FritzServiceError, FritzActionError, FritzConnectionException, RequestException:
-            logger.debug("No time zone from %s, event times have no offset", self.name)
-            return None, None, None
-        # An ISO string with offset normally; right after a reboot, before the clock is
-        # synced, fritzconnection hands over None or a naive datetime instead.
-        value = info.get("NewCurrentLocalTime")
-        if isinstance(value, str):
-            try:
-                value = datetime.fromisoformat(value)
-            except ValueError:
-                value = None
-        if not isinstance(value, datetime):
-            return info.get("NewLocalTimeZoneName"), None, None
-        synced = value.year != PRE_SYNC_EPOCH.year
-        return (
-            info.get("NewLocalTimeZoneName"),
-            value.utcoffset(),
-            value.replace(tzinfo=None) if synced else None,
-        )
-
-    def _capture(self, body: bytes, info: dict[str, Any]) -> None:
-        if self.capture is None:
-            return
-        try:
-            self.capture.record(body, info)
-        except OSError as e:
-            logger.warning("%s: could not store the snapshot (%s)", self.name, e)
-
-    def _capture_failure(self, error: str) -> None:
-        if self.capture is None:
-            return
-        try:
-            self.capture.record_failure(error)
-        except OSError as e:
-            logger.warning("%s: could not log the failed poll (%s)", self.name, e)
-
-    def _load_state(self, serial: str | None) -> None:
-        # Once per run: later polls go on from the tracker in memory.
-        if self._state_loaded or self.state is None:
-            return
-        self._state_loaded = True
-        tracker = self.state.load(serial)
-        if tracker is not None:
-            self.tracker = tracker
-
-    def poll(self) -> list[dict[str, Any]]:
-        """Return the records of all occurrences not emitted before, oldest first."""
-        try:
-            fc = self._connection()
-            body = self._fetch(fc)
-            info = fc.call_action("DeviceInfo1", "GetInfo")
-            uptime = int(info["NewUpTime"])
-        except (FritzConnectionException, RequestException, KeyError, TypeError, ValueError) as e:
-            self._fc = None
-            msg = f"could not read the event log ({type(e).__name__})"
-            self._capture_failure(msg)
-            raise ExtractionError(msg) from None
-        except ExtractionError as e:
-            self._capture_failure(str(e))
-            raise
-        now = datetime.now(UTC)
-
-        # Capture before parsing, so a body the parser rejects is kept too.
-        self._capture(body, info)
-        try:
-            parsed = parse_event_log(body)
+            return parse_event_log(body)
         except EventLogParseError as e:
             msg = f"could not parse the event log ({e})"
             raise ExtractionError(msg) from None
 
-        self._serial = info.get("NewSerialNumber")
-        self._load_state(self._serial)
+    def _clock(self, now: datetime, uptime: int) -> BoxClock:
+        """Boot time on both clocks, time zone rule and current offset from ``Time1:GetInfo``."""
         boot = now - timedelta(seconds=uptime)
-        tz_rule, current_offset, box_now = self._time_info(fc)
-        box_boot = box_now - timedelta(seconds=uptime) if box_now else None
-        if self.tracker.boot is not None and not self.tracker.is_same_boot(boot):
-            logger.info("%s has restarted, its whole log is new", self.name)
+        try:
+            info = self._connection().call_action("Time1", "GetInfo")
+        except (FritzServiceError, FritzActionError, *_CONNECTION_ERRORS) as e:
+            if isinstance(e, _CONNECTION_ERRORS):
+                self._fc = None
+            logger.debug("No time zone from %s, event times have no offset", self.name)
+            return BoxClock(boot)
+        tz_rule = info.get("NewLocalTimeZoneName")
+        # An ISO string with offset normally; right after a reboot, before the clock is
+        # synced, fritzconnection hands over None or a naive datetime instead.
+        box_now = info.get("NewCurrentLocalTime")
+        if isinstance(box_now, str):
+            try:
+                box_now = datetime.fromisoformat(box_now)
+            except ValueError:
+                box_now = None
+        if not isinstance(box_now, datetime):
+            return BoxClock(boot, tz_rule=tz_rule)
+        if is_pre_sync(box_now):
+            return BoxClock(boot, tz_rule=tz_rule, utc_offset=box_now.utcoffset())
+        box_boot = box_now.replace(tzinfo=None) - timedelta(seconds=uptime)
+        return BoxClock(boot, box_boot, tz_rule, box_now.utcoffset())
 
-        records = [
-            self._record(entry, boot, box_boot, tz_rule, current_offset)
-            for entry in self.tracker.new_entries(parsed.events, boot, box_boot)
-        ]
-        self._pending = _Snapshot(parsed, boot, box_boot)
-        return records
+    # --- State, capture, warnings ----------------------------------------------------------
 
-    def _record(
-        self,
-        entry: NewEntry,
-        boot: datetime,
-        box_boot: datetime | None,
-        tz_rule: str | None,
-        current_offset: timedelta | None,
-    ) -> dict[str, Any]:
-        event = entry.event
-        if not event.pre_sync:
-            local = event.timestamp
-            event_time = with_offset(local, resolve_utc_offset(local, tz_rule, current_offset))
-        elif box_boot is not None:
-            local = box_boot + (event.timestamp - PRE_SYNC_EPOCH)
-            event_time = with_offset(local, resolve_utc_offset(local, tz_rule, current_offset))
-        else:
-            # The box does not know the time yet: estimate it on our clock, in UTC.
-            event_time = boot + (event.timestamp - PRE_SYNC_EPOCH)
-        return event_record(
-            event,
-            event_time,
-            repeat=entry.repeat,
-            estimated=event.pre_sync,
-            device=self.name,
-            host=self.config.hostname,
-            serial=self._serial,
-        )
-
-    def commit(self) -> None:
-        """Record the snapshot of the last :meth:`poll` as emitted."""
-        if self._pending is None:
+    def _load_state(self) -> None:
+        # Once per run: later polls go on from the tracker in memory.
+        if self._state_loaded or self._state is None:
             return
-        parsed, boot, box_boot = self._pending.parsed, self._pending.boot, self._pending.box_boot
-        self._pending = None
-        self.tracker.commit(parsed.events, boot, box_boot)
-        self._warn_rejected(parsed)
-        if self.state is None:
+        self._state_loaded = True
+        tracker = self._state.load(self._serial)
+        if tracker is not None:
+            self._tracker = tracker
+
+    def _save_state(self) -> None:
+        if self._state is None:
             return
         try:
-            self.state.save(self._serial, self.tracker)
+            self._state.save(self._serial, self._tracker)
         except OSError as e:
             # Warn once per failing streak, not on every poll.
             if not self._state_failing:
@@ -244,6 +219,23 @@ class DeviceExtractor:
         else:
             self._state_failing = False
 
+    def _store_snapshot(self, body: bytes, info: dict[str, Any]) -> None:
+        # Before parsing, so a body the parser rejects is kept too.
+        if self._capture is None:
+            return
+        try:
+            self._capture.record(body, info)
+        except OSError as e:
+            logger.warning("%s: could not store the snapshot (%s)", self.name, e)
+
+    def _store_failure(self, error: str) -> None:
+        if self._capture is None:
+            return
+        try:
+            self._capture.record_failure(error)
+        except OSError as e:
+            logger.warning("%s: could not log the failed poll (%s)", self.name, e)
+
     def _warn_rejected(self, parsed: ParsedEventLog) -> None:
         rejected = set(parsed.rejected)
         if rejected - self._rejected_seen:
@@ -251,16 +243,9 @@ class DeviceExtractor:
                 "%s: skipping %d event log entries that failed validation (first: %s)",
                 self.name,
                 len(rejected),
-                min(rejected)[:_MAX_REJECT_REPR],
+                parsed.rejected[0][:_MAX_REJECT_REPR],
             )
         self._rejected_seen = rejected
-
-
-@define(frozen=True)
-class _Snapshot:
-    parsed: ParsedEventLog
-    boot: datetime
-    box_boot: datetime | None
 
 
 # Copyright 2026 Patrick Dreker <patrick@dreker.de>

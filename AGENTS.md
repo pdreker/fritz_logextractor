@@ -77,18 +77,21 @@ are git-ignored). Check changes to the tracker by replaying local captures throu
 | `__main__.py` | Command line, poll loop, writes records to stdout, then commits |
 | `logs.py` | The tool's own log lines on stderr: JSON (`"kind": "log"`) or text |
 | `config/` | Config file or environment → `ExtractorConfig` |
-| `extractor.py` | One device: TR-064 calls, fetching the log, times of pre-sync rows, records |
-| `eventlog.py` | Strict parser (splits off the fold counter), output record, POSIX time zone rules; adapted from fritz_exporter PR #719 |
+| `extractor.py` | One device: TR-064 calls, fetching the log, building records; the only module that talks to the box |
+| `eventlog.py` | Strict parser (splits off the fold counter), output record, redaction; adapted from fritz_exporter PR #719 |
+| `clock.py` | `BoxClock` (boot on both clocks, time zone): times of pre-sync rows, POSIX time zone rules, UTC offset |
 | `tracker.py` | Which rows are new (see "Duplicate handling") |
 | `state.py` | State file per device |
+| `files.py` | Safe file names from config values, private atomic writes |
 | `capture.py` | `--capture DIR`: raw snapshots plus uptime per poll, to study real boxes |
 
 One poll of one device:
 
 1. `DeviceInfo1:X_AVM-DE_GetDeviceLogPath`, then GET that path on the TR-064 server.
 2. `DeviceInfo1:GetInfo`: uptime and serial. Required; without them the poll fails.
-3. `Time1:GetInfo`: time zone rule, current offset and box-local time (`None` before sync).
-4. Parse, ask the tracker what is new, build records.
+3. `Time1:GetInfo`: time zone rule, current offset and box-local time (`None` before sync),
+   which make the poll's `BoxClock`.
+4. Parse, ask the tracker what is new, build records with the times from `BoxClock`.
 5. `poll_all()` writes and flushes the records, then calls `commit()`: the tracker takes the
    snapshot and the state file is written. A failure before the commit repeats records on the
    next poll, never loses them.

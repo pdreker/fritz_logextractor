@@ -27,10 +27,12 @@ from typing import TYPE_CHECKING, Any
 
 from attrs import define
 
-from fritzlogextractor.eventlog import PRE_SYNC_EPOCH, Event
+from fritzlogextractor.clock import on_box_clock
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from fritzlogextractor.eventlog import Event
 
 __all__ = ["EventLogTracker", "NewEntry"]
 
@@ -62,13 +64,6 @@ def _key(event: Event) -> _Key:
     return (event.id, event.group, event.msg)
 
 
-def _on_box_clock(time: datetime, box_boot: datetime | None) -> datetime:
-    """Put a 1970 time on the box's clock, once the box knows its boot time."""
-    if box_boot is None or time.year != PRE_SYNC_EPOCH.year:
-        return time
-    return box_boot + (time - PRE_SYNC_EPOCH)
-
-
 class EventLogTracker:
     """Remembers the rows of the last emitted snapshot of one device.
 
@@ -95,7 +90,7 @@ class EventLogTracker:
         old: dict[_Key, list[tuple[datetime, int]]] = defaultdict(list)
         if self.is_same_boot(boot):
             for seen in self._seen:
-                old[seen.key].append((_on_box_clock(seen.first, box_boot), seen.count))
+                old[seen.key].append((on_box_clock(seen.first, box_boot), seen.count))
 
         current: dict[_Key, list[Event]] = defaultdict(list)
         for event in events:
@@ -104,12 +99,12 @@ class EventLogTracker:
         new: list[NewEntry] = []
         for key, rows in current.items():
             new.extend(_match(old.get(key, []), rows, box_boot))
-        return sorted(new, key=lambda n: _on_box_clock(n.event.timestamp, box_boot))
+        return sorted(new, key=lambda n: on_box_clock(n.event.timestamp, box_boot))
 
     def commit(self, events: Iterable[Event], boot: datetime, box_boot: datetime | None) -> None:
         """Record ``events`` as emitted."""
         self.boot = boot
-        self._seen = [_Seen(_key(e), _on_box_clock(e.first, box_boot), e.count) for e in events]
+        self._seen = [_Seen(_key(e), on_box_clock(e.first, box_boot), e.count) for e in events]
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -144,11 +139,11 @@ def _match(
 ) -> list[NewEntry]:
     """Pair the rows of one message with the known ones, both newest first."""
     old = sorted(old, reverse=True)
-    rows = sorted(rows, key=lambda e: _on_box_clock(e.first, box_boot), reverse=True)
+    rows = sorted(rows, key=lambda e: on_box_clock(e.first, box_boot), reverse=True)
     new: list[NewEntry] = []
     i = 0
     for row in rows:
-        first = _on_box_clock(row.first, box_boot)
+        first = on_box_clock(row.first, box_boot)
         # Known rows newer than this one have left the log (or never come back).
         while i < len(old) and old[i][0] - first > TIME_TOLERANCE:
             i += 1

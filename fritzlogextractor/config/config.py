@@ -26,6 +26,9 @@ logger = logging.getLogger("fritzlogextractor.config")
 # Fritz!OS rejects longer passwords for TR-064.
 FRITZ_MAX_PASSWORD_LENGTH = 32
 
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+DEFAULT_HOSTNAME: str = "fritz.box"
 DEFAULT_CONNECTION_TIMEOUT: int = 10
 DEFAULT_POLL_INTERVAL: int = 60
 DEFAULT_STATE_DIR: str = "/var/lib/fritzlogextractor"
@@ -45,35 +48,30 @@ def _read_config_file(config_file_path: str) -> dict[str, Any]:
     return config
 
 
+# Environment variables for the keys of the config file, with one device.
+_ENV_KEYS = {
+    "log_level": "FRITZ_LOG_LEVEL",
+    "poll_interval": "FRITZ_POLL_INTERVAL",
+    "state_dir": "FRITZ_STATE_DIR",
+}
+_ENV_DEVICE_KEYS = {
+    "hostname": "FRITZ_HOSTNAME",
+    "name": "FRITZ_NAME",
+    "username": "FRITZ_USERNAME",
+    "password": "FRITZ_PASSWORD",
+    "password_file": "FRITZ_PASSWORD_FILE",
+    "connection_timeout": "FRITZ_CONNECTION_TIMEOUT",
+    "use_tls": "FRITZ_USE_TLS",
+}
+
+
+def _from_env(keys: dict[str, str]) -> dict[str, str]:
+    return {key: os.environ[env] for key, env in keys.items() if env in os.environ}
+
+
 def _read_config_from_env() -> dict[str, Any]:
-    config: dict[str, Any] = {}
-    for key, env in (
-        ("log_level", "FRITZ_LOG_LEVEL"),
-        ("poll_interval", "FRITZ_POLL_INTERVAL"),
-        ("state_dir", "FRITZ_STATE_DIR"),
-    ):
-        value = os.getenv(env)
-        if value is not None:
-            config[key] = value
-
-    device: dict[str, Any] = {
-        "username": os.getenv("FRITZ_USERNAME", ""),
-        "password": os.getenv("FRITZ_PASSWORD"),
-        "password_file": os.getenv("FRITZ_PASSWORD_FILE"),
-        "use_tls": os.getenv("FRITZ_USE_TLS", "False"),
-    }
-    for key, env in (
-        ("hostname", "FRITZ_HOSTNAME"),
-        ("name", "FRITZ_NAME"),
-        ("connection_timeout", "FRITZ_CONNECTION_TIMEOUT"),
-    ):
-        value = os.getenv(env)
-        if value is not None:
-            device[key] = value
-    config["devices"] = [device]
-
     logger.info("No configuration file specified: configuration read from environment")
-    return config
+    return {**_from_env(_ENV_KEYS), "devices": [_from_env(_ENV_DEVICE_KEYS)]}
 
 
 def _checked_mapping(config: object, cls: type, where: str) -> dict[str, Any]:
@@ -96,10 +94,18 @@ def get_config(config_file_path: str | None) -> ExtractorConfig:
     return ExtractorConfig.from_config(config)
 
 
+def _check_password_length(password: str) -> None:
+    if len(password) > FRITZ_MAX_PASSWORD_LENGTH:
+        msg = f"Password is longer than {FRITZ_MAX_PASSWORD_LENGTH} characters."
+        raise FritzPasswordTooLongError(msg)
+
+
 @define
 class DeviceConfig:
-    hostname: str = field(validator=validators.min_len(1), converter=str.lower)
-    username: str = field(validator=validators.min_len(1))
+    hostname: str = field(
+        default=DEFAULT_HOSTNAME, validator=validators.min_len(1), converter=str.lower
+    )
+    username: str = field(default="", validator=validators.min_len(1))
     password: str | None = field(default=None)
     password_file: str | None = field(default=None)
     # Defaults to the hostname.
@@ -113,47 +119,43 @@ class DeviceConfig:
 
     @password.validator  # ty: ignore[unresolved-attribute]
     def check_password(self, _: attrs.Attribute, value: str | None) -> None:
-        if value is not None and len(value) > FRITZ_MAX_PASSWORD_LENGTH:
-            msg = f"Password is longer than {FRITZ_MAX_PASSWORD_LENGTH} characters."
-            raise FritzPasswordTooLongError(msg)
+        if value is not None:
+            _check_password_length(value)
 
     @password_file.validator  # ty: ignore[unresolved-attribute]
     def check_password_file(self, _: attrs.Attribute, value: str | None) -> None:
         if value is not None and not Path(value).is_file():
             msg = "Password file does not exist."
             raise FritzPasswordFileDoesNotExistError(msg)
-        if value is None and self.password is None:
-            msg = "Either password or password_file must be set."
-            raise FritzPasswordMissingError(msg)
 
     def __attrs_post_init__(self) -> None:
+        if self.password is None and self.password_file is None:
+            msg = "Either password or password_file must be set."
+            raise FritzPasswordMissingError(msg)
         if not self.name:
             self.name = self.hostname
+
+    def read_password(self) -> str:
+        """The password; a password file is read each time, so it may change in between."""
+        if self.password_file is None:
+            return self.password or ""
+        password = Path(self.password_file).read_text().strip()
+        _check_password_length(password)
+        return password
 
     @classmethod
     def from_config(cls, config: object, where: str = "device") -> DeviceConfig:
         hostname = config.get("hostname") if isinstance(config, dict) else None
         if isinstance(hostname, str) and hostname:
             where = f"{where} ({hostname})"
-        device = _checked_mapping(config, cls, where)
-        return cls(
-            hostname=device.get("hostname", "fritz.box"),
-            username=device.get("username", ""),
-            password=device.get("password"),
-            password_file=device.get("password_file"),
-            name=device.get("name", ""),
-            connection_timeout=device.get("connection_timeout", DEFAULT_CONNECTION_TIMEOUT),
-            use_tls=device.get("use_tls", False),
-        )
+        return cls(**_checked_mapping(config, cls, where))
 
 
 @define
 class ExtractorConfig:
     devices: list[DeviceConfig] = field(factory=list)
     log_level: str = field(
-        default="INFO",
-        converter=str.upper,
-        validator=validators.in_(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+        default="INFO", converter=str.upper, validator=validators.in_(LOG_LEVELS)
     )
     poll_interval: int = field(
         default=DEFAULT_POLL_INTERVAL, converter=int, validator=validators.ge(10)
@@ -171,8 +173,8 @@ class ExtractorConfig:
         if data is None:
             msg = "No config found (check env vars or config file)."
             raise EmptyConfigError(msg)
-        config = _checked_mapping(data, cls, "config")
-        devices = config.get("devices") or []
+        config = dict(_checked_mapping(data, cls, "config"))
+        devices = config.pop("devices", None) or []
         if not isinstance(devices, list):
             msg = f"config: devices must be a list, got {type(devices).__name__}"
             raise ConfigNotAMappingError(msg)
@@ -181,9 +183,7 @@ class ExtractorConfig:
                 DeviceConfig.from_config(dev, f"device {n}")
                 for n, dev in enumerate(devices, start=1)
             ],
-            log_level=config.get("log_level", "INFO"),
-            poll_interval=config.get("poll_interval", DEFAULT_POLL_INTERVAL),
-            state_dir=config.get("state_dir", DEFAULT_STATE_DIR),
+            **config,
         )
 
 

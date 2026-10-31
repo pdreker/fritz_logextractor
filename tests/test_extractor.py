@@ -128,6 +128,20 @@ class TestDeviceExtractor:
 
         assert mock_fc_cls.call_args.kwargs["password"] == "from-file"
 
+    @pytest.mark.parametrize(("content", "error"), [(None, "No such file"), ("x" * 33, "longer than 32")])
+    def test_bad_password_file_is_an_extraction_error(self, mock_fc_cls, tmp_path, content, error):
+        pw = tmp_path / "pw"
+        pw.write_text("p")
+        extractor = DeviceExtractor(device(password=None, password_file=str(pw)))
+        if content is None:
+            pw.unlink()
+        else:
+            pw.write_text(content)
+
+        with pytest.raises(ExtractionError, match=f"could not read the password .*{error}"):
+            extractor.poll()
+        mock_fc_cls.assert_not_called()
+
     def test_later_polls_return_only_new_entries(self, mock_fc_cls):
         setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(CONNECTED), log_xml(LOGIN, CONNECTED))
         extractor = DeviceExtractor(device())

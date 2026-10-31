@@ -9,39 +9,17 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import re
 from typing import TYPE_CHECKING
 
+from fritzlogextractor.files import safe_file_name, write_private
 from fritzlogextractor.tracker import EventLogTracker
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-__all__ = ["StateFile", "safe_file_name", "write_private"]
+__all__ = ["StateFile"]
 
 logger = logging.getLogger("fritzlogextractor.state")
-
-_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
-
-
-def safe_file_name(text: str) -> str:
-    """``text`` with every character that could leave the directory replaced."""
-    name = _UNSAFE_RE.sub("_", text)
-    return name if name.strip(".") else "device"
-
-
-def write_private(path: Path, data: bytes) -> None:
-    """Replace ``path`` atomically with ``data``, readable by the owner only."""
-    partial = path.with_suffix(".tmp")
-    fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as f:
-        # The mode of open() applies only to a new file, not to one left behind.
-        os.fchmod(f.fileno(), 0o600)
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
-    partial.replace(path)
 
 
 class StateFile:
