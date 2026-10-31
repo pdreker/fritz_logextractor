@@ -28,16 +28,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+
+from fritzlogextractor.state import safe_file_name
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 __all__ = ["SnapshotCapture"]
 
-_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
 _DIGEST_PREFIX = 16
 
 
@@ -45,7 +45,7 @@ class SnapshotCapture:
     """Stores the snapshots of one device below ``directory``."""
 
     def __init__(self, directory: Path, device: str) -> None:
-        self.directory = directory / (_UNSAFE_RE.sub("_", device) or "device")
+        self.directory = directory / safe_file_name(device)
 
     def record(self, body: bytes, info: dict[str, Any]) -> None:
         """Store ``body`` unless already stored and log the poll; ``info`` is DeviceInfo:GetInfo."""

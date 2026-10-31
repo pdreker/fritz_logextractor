@@ -3,18 +3,14 @@
 > [!WARNING]
 > **Proof of concept. Not ready for production use.**
 >
-> It reads the event log and prints new entries as JSON lines, but:
+> It prints each new entry once, also across restarts of the tool and reboots of the box, but:
 >
-> - **Duplicates after a restart:** which entries were already printed is kept in memory only.
->   Each start prints the whole buffer of the box again.
-> - **No reboot detection** and no special handling of the bogus timestamps a box logs before
->   its clock is synced.
-> - **Entries are lost** if the box reboots between two polls.
-> - Tested against one real box only: v0.1.0 read the log of a FRITZ!Box 6660 Cable on
->   FRITZ!OS 8.25 (`--once`, 104 entries in the groups `sys`, `net` and `wlan`). Remote access is
->   not supported.
+> - **Entries are lost** if the box logs them and then reboots before the next poll.
+> - Checked against few devices: a FRITZ!Box 7690 (FRITZ!OS 8.50) with a FRITZ!Repeater 1200
+>   AX over a day with reboots, and a FRITZ!Box 6660 Cable (FRITZ!OS 8.25) once. Other models
+>   and firmware may change their log in ways not handled yet. Remote access is not supported.
 >
-> The planned design is in [AGENTS.md](AGENTS.md).
+> The design is in [AGENTS.md](AGENTS.md).
 
 Reads the event log of AVM Fritz! devices over TR-064 and writes each new entry once, as a
 structured log line, so a log stack (Loki, Elasticsearch, journald, …) can keep it.
@@ -36,11 +32,36 @@ fritzlogextractor                 # keep polling, print new entries as they appe
 Events go to stdout, one JSON object per line; the tool's own messages go to stderr:
 
 ```json
-{"event_time": "2026-10-09T08:31:57+02:00", "device": "fritz.box", "host": "fritz.box", "group": "net", "id": 22, "msg": "Internetverbindung wurde erfolgreich hergestellt. ..."}
+{"event_time": "2026-10-09T08:31:57+02:00", "time_estimated": false, "box_time": "09.10.26 08:31:57", "device": "fritz.box", "host": "fritz.box", "serial": "...", "group": "net", "id": 22, "msg": "Internetverbindung wurde erfolgreich hergestellt. ...", "repeat": 1}
 ```
 
-`id` is the message type and does not depend on the box's language; `msg` is localized. DynDNS
-update tokens (`q=...`) are redacted.
+| Field | Meaning |
+|---|---|
+| `event_time` | When it happened, ISO 8601 with the box's UTC offset (without one if the box does not tell its time zone) |
+| `time_estimated` | `true` for entries the box logged after a reboot, before it had synced its clock (the box dates them 01.01.70); the tool works out the time from the uptime, to within a second or so |
+| `box_time` | The time as the box shows it |
+| `device`, `host`, `serial` | The device's name from the configuration, its hostname and its serial number |
+| `group` | `sys`, `net`, `wlan`, … |
+| `id` | The message type; does not depend on the box's language |
+| `msg` | The message as the box words it, in its language, without the counter of repeats; DynDNS update tokens (`q=...`) are redacted |
+| `repeat` | How many occurrences this line stands for, see below |
+
+**Repeats.** When the same message comes again right away, the box does not add a row: it bumps
+a counter on the existing row (`[3 Meldungen seit …]`) and moves the row to the time of the
+latest occurrence. The tool prints one line per such change, with `repeat` set to the number of
+new occurrences and `event_time` the latest one; the times in between are lost on the box.
+
+**What the tool remembers.** Per device it keeps a state file in `state_dir`, so a restart does
+not print the log again. A reboot of the box empties its log; the tool notices it from the
+uptime and prints everything the box logs after it. Without a writable `state_dir` the tool
+warns and remembers only in memory, so each start prints the whole log once more.
+
+**Mesh.** A FRITZ!Box that is mesh master also shows the log of its repeaters, as rows starting
+with `[fritz.repeater]`. Polling the box is enough; polling the repeaters as well gives their
+entries twice.
+
+**Own logins.** Each login of the tool shows up in the log as "Anmeldung einer App" (`id` 506 or
+507), once per session: at start and after connection errors.
 
 ### Capturing snapshots
 
@@ -85,8 +106,8 @@ or `--config /etc/fritz/config.yaml` with the file mounted under `/etc/fritz` (t
 are then ignored, see [Configuration](#configuration)).
 
 The image runs as `nobody` (65534): mounted config and password files must be readable by that
-user. `/var/lib/fritzlogextractor` is a volume for the state file once the tool keeps one; a
-host directory mounted there must be writable by 65534.
+user. `/var/lib/fritzlogextractor` is a volume for the state files; a host directory mounted
+there must be writable by 65534.
 
 ## Configuration
 
@@ -142,7 +163,7 @@ fritzlogextractor
 |---|---|---|
 | `log_level` | `FRITZ_LOG_LEVEL` | `INFO` |
 | `poll_interval` | `FRITZ_POLL_INTERVAL` | `60` (seconds, at least 10) |
-| `state_dir` | `FRITZ_STATE_DIR` | `/var/lib/fritzlogextractor` (not used yet) |
+| `state_dir` | `FRITZ_STATE_DIR` | `/var/lib/fritzlogextractor` |
 | `devices[].hostname` | `FRITZ_HOSTNAME` | `fritz.box` |
 | `devices[].name` | `FRITZ_NAME` | the hostname |
 | `devices[].username` | `FRITZ_USERNAME` | *(required)* |

@@ -1,5 +1,6 @@
 import json
-from datetime import datetime
+import logging
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +12,7 @@ from fritzlogextractor.config import DeviceConfig
 from fritzlogextractor.extractor import DeviceExtractor, ExtractionError
 
 LOG_PATH = "/devicelog.lua?sid=0123456789abcdef"
+TZ_RULE = "CET-1CEST,M3.5.0,M10.5.0/3"
 
 
 def log_xml(*events):
@@ -23,6 +25,13 @@ def log_xml(*events):
 
 CONNECTED = ("22", "net", "09.10.26", "08:31:57", "Internetverbindung wurde hergestellt.")
 LOGIN = ("504", "sys", "09.10.26", "21:49:06", "Anmeldung des Benutzers exporter.")
+INFO = {
+    "NewUpTime": 3600,
+    "NewModelName": "FRITZ!Box 7690",
+    "NewSoftwareVersion": "8.25",
+    "NewSerialNumber": "SERIAL1",
+}
+NO_INFO = object()
 
 
 def response(body: bytes, status: int = 200) -> MagicMock:
@@ -33,12 +42,11 @@ def response(body: bytes, status: int = 200) -> MagicMock:
     return resp
 
 
-def setup_fc(
-    mock_fc_cls: MagicMock, *bodies: bytes, time_info=None, device_info=None
-) -> MagicMock:
+def setup_fc(mock_fc_cls: MagicMock, *bodies: bytes, time_info=None, device_info=INFO):
     fc = mock_fc_cls.return_value
     fc.address = "http://fritz.box"
     fc.port = 49000
+    infos = device_info if isinstance(device_info, list) else None
 
     def call_action(service, action, **kwargs):
         if action == "X_AVM-DE_GetDeviceLogPath":
@@ -47,10 +55,11 @@ def setup_fc(
             if time_info is None:
                 raise FritzActionError("no time")
             return time_info
-        if action == "GetInfo" and device_info is not None:
-            return device_info
-        if action == "GetInfo":
-            raise FritzActionError("no info")
+        if (service, action) == ("DeviceInfo1", "GetInfo"):
+            info = infos.pop(0) if infos is not None else device_info
+            if info is NO_INFO:
+                raise FritzActionError("no info")
+            return info
         raise AssertionError(f"unexpected {service} {action}")
 
     fc.call_action.side_effect = call_action
@@ -64,6 +73,13 @@ def device(**overrides) -> DeviceConfig:
     return DeviceConfig(**values)
 
 
+def poll(extractor: DeviceExtractor) -> list[dict]:
+    """Poll and commit, as poll_all() does once the records are written."""
+    records = extractor.poll()
+    extractor.commit()
+    return records
+
+
 @patch("fritzlogextractor.extractor.FritzConnection")
 class TestDeviceExtractor:
     def test_first_poll_returns_whole_buffer_oldest_first_with_offset(self, mock_fc_cls):
@@ -71,7 +87,7 @@ class TestDeviceExtractor:
             mock_fc_cls,
             log_xml(LOGIN, CONNECTED),
             time_info={
-                "NewLocalTimeZoneName": "CET-1CEST,M3.5.0,M10.5.0/3",
+                "NewLocalTimeZoneName": TZ_RULE,
                 "NewCurrentLocalTime": "2026-10-16T10:00:00+02:00",
             },
         )
@@ -82,6 +98,9 @@ class TestDeviceExtractor:
         assert records[0]["event_time"] == "2026-10-09T08:31:57+02:00"
         assert records[0]["device"] == "Box"
         assert records[0]["host"] == "fritz.box"
+        assert records[0]["serial"] == "SERIAL1"
+        assert records[0]["repeat"] == 1
+        assert records[0]["time_estimated"] is False
 
     def test_fetch_uses_the_tr064_session_and_timeout(self, mock_fc_cls):
         fc = setup_fc(mock_fc_cls, log_xml())
@@ -110,9 +129,37 @@ class TestDeviceExtractor:
         setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(CONNECTED), log_xml(LOGIN, CONNECTED))
         extractor = DeviceExtractor(device())
 
+        assert len(poll(extractor)) == 1
+        assert poll(extractor) == []
+        assert [r["id"] for r in poll(extractor)] == [504]
+
+    def test_entries_come_again_until_committed(self, mock_fc_cls):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(CONNECTED), log_xml(CONNECTED))
+        extractor = DeviceExtractor(device())
+
         assert len(extractor.poll()) == 1
+        assert len(extractor.poll()) == 1
+        extractor.commit()
         assert extractor.poll() == []
-        assert [r["id"] for r in extractor.poll()] == [504]
+
+    def test_folded_row_gives_one_record_with_repeat(self, mock_fc_cls):
+        once = ("504", "sys", "09.10.26", "21:48:36", "Anmeldung gescheitert.")
+        thrice = (
+            "504",
+            "sys",
+            "09.10.26",
+            "21:49:06",
+            "Anmeldung gescheitert. [3 Meldungen seit 09.10.26 21:48:36]",
+        )
+        setup_fc(mock_fc_cls, log_xml(once), log_xml(thrice))
+        extractor = DeviceExtractor(device())
+        poll(extractor)
+
+        [record] = poll(extractor)
+
+        assert record["repeat"] == 2
+        assert record["msg"] == "Anmeldung gescheitert."
+        assert record["box_time"] == "09.10.26 21:49:06"
 
     def test_missing_time_zone_gives_times_without_offset(self, mock_fc_cls):
         setup_fc(mock_fc_cls, log_xml(CONNECTED))
@@ -126,10 +173,7 @@ class TestDeviceExtractor:
         setup_fc(
             mock_fc_cls,
             log_xml(CONNECTED),
-            time_info={
-                "NewLocalTimeZoneName": "CET-1CEST,M3.5.0,M10.5.0/3",
-                "NewCurrentLocalTime": current,
-            },
+            time_info={"NewLocalTimeZoneName": TZ_RULE, "NewCurrentLocalTime": current},
         )
 
         assert DeviceExtractor(device()).poll()[0]["event_time"] == "2026-10-09T08:31:57+02:00"
@@ -139,8 +183,14 @@ class TestDeviceExtractor:
 
         assert DeviceExtractor(device()).poll()[0]["event_time"] == "2026-10-09T08:31:57"
 
+    def test_device_info_is_required(self, mock_fc_cls):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=NO_INFO)
+
+        with pytest.raises(ExtractionError, match=r"could not read the event log \(FritzActionError\)"):
+            DeviceExtractor(device()).poll()
+
     def test_http_error_raises_and_loses_nothing(self, mock_fc_cls):
-        setup_fc(mock_fc_cls, b"", log_xml(CONNECTED))
+        setup_fc(mock_fc_cls)
         mock_fc_cls.return_value.session.get.side_effect = [
             response(b"", 500),
             response(log_xml(CONNECTED)),
@@ -157,6 +207,16 @@ class TestDeviceExtractor:
         with pytest.raises(ExtractionError, match="could not parse"):
             DeviceExtractor(device()).poll()
 
+    def test_rejected_entries_warn_once_not_every_poll(self, mock_fc_cls, caplog):
+        bad = log_xml(("x", "sys", "09.10.26", "08:31:40", "m"), CONNECTED)
+        setup_fc(mock_fc_cls, bad, bad, bad)
+        extractor = DeviceExtractor(device())
+
+        for _ in range(3):
+            poll(extractor)
+
+        assert caplog.text.count("failed validation") == 1
+
     @pytest.mark.parametrize(
         "error", [FritzConnectionException("down"), RequestsConnectionError("refused")]
     )
@@ -172,7 +232,119 @@ class TestDeviceExtractor:
         assert mock_fc_cls.call_count == 2
 
 
-INFO = {"NewUpTime": 3600, "NewModelName": "FRITZ!Box 7690", "NewSoftwareVersion": "8.25"}
+TRAINING = ("12", "net", "01.01.70", "00:00:34", "DSL-Synchronisierung beginnt (Training).")
+
+
+@patch("fritzlogextractor.extractor.FritzConnection")
+class TestReboot:
+    def test_row_before_sync_is_estimated_on_our_clock_while_the_box_has_no_time(
+        self, mock_fc_cls
+    ):
+        setup_fc(
+            mock_fc_cls,
+            log_xml(TRAINING),
+            device_info={**INFO, "NewUpTime": 86},
+            time_info={"NewLocalTimeZoneName": TZ_RULE, "NewCurrentLocalTime": None},
+        )
+        before = datetime.now(UTC)
+
+        [record] = DeviceExtractor(device()).poll()
+
+        event_time = datetime.fromisoformat(record["event_time"])
+        expected = before - timedelta(seconds=86 - 34)
+        assert record["time_estimated"] is True
+        assert record["box_time"] == "01.01.70 00:00:34"
+        assert event_time.utcoffset() == timedelta(0)
+        assert abs(event_time - expected) < timedelta(seconds=5)
+
+    def test_row_before_sync_is_put_on_the_box_clock_once_synced(self, mock_fc_cls):
+        setup_fc(
+            mock_fc_cls,
+            log_xml(TRAINING),
+            device_info={**INFO, "NewUpTime": 192},
+            time_info={
+                "NewLocalTimeZoneName": TZ_RULE,
+                "NewCurrentLocalTime": "2026-10-31T00:18:49+01:00",
+            },
+        )
+
+        [record] = DeviceExtractor(device()).poll()
+
+        # boot = 00:18:49 - 192 s = 00:15:37, plus 34 s
+        assert record["event_time"] == "2026-10-31T00:16:11+01:00"
+        assert record["time_estimated"] is True
+
+    def test_reboot_makes_the_whole_log_new_and_is_logged(self, mock_fc_cls, caplog):
+        caplog.set_level(logging.INFO)
+        setup_fc(
+            mock_fc_cls,
+            log_xml(TRAINING),
+            log_xml(TRAINING),
+            device_info=[{**INFO, "NewUpTime": 1294670}, {**INFO, "NewUpTime": 86}],
+        )
+        extractor = DeviceExtractor(device())
+        poll(extractor)
+
+        assert len(poll(extractor)) == 1
+        assert "Box has restarted" in caplog.text
+
+
+@patch("fritzlogextractor.extractor.FritzConnection")
+class TestState:
+    def test_restart_of_the_tool_does_not_emit_the_log_again(self, mock_fc_cls, tmp_path):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(LOGIN, CONNECTED))
+        poll(DeviceExtractor(device(), tmp_path))
+
+        records = poll(DeviceExtractor(device(), tmp_path))
+
+        assert [r["id"] for r in records] == [504]
+
+    def test_state_is_written_only_on_commit(self, mock_fc_cls, tmp_path):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(CONNECTED))
+        DeviceExtractor(device(), tmp_path).poll()
+
+        assert len(DeviceExtractor(device(), tmp_path).poll()) == 1
+
+    def test_state_file_is_private_and_named_after_the_host(self, mock_fc_cls, tmp_path):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED))
+
+        poll(DeviceExtractor(device(hostname="Fritz.Box"), tmp_path / "state"))
+
+        assert (tmp_path / "state").stat().st_mode & 0o777 == 0o700
+        assert [f.name for f in (tmp_path / "state").iterdir()] == ["fritz.box.json"]
+        assert (tmp_path / "state" / "fritz.box.json").stat().st_mode & 0o777 == 0o600
+
+    def test_state_of_another_device_is_ignored(self, mock_fc_cls, tmp_path):
+        setup_fc(
+            mock_fc_cls,
+            log_xml(CONNECTED),
+            log_xml(CONNECTED),
+            device_info=[INFO, {**INFO, "NewSerialNumber": "OTHER"}],
+        )
+        poll(DeviceExtractor(device(), tmp_path))
+
+        assert len(poll(DeviceExtractor(device(), tmp_path))) == 1
+
+    @pytest.mark.parametrize("content", ["not json", "[]", '{"serial": "SERIAL1"}'])
+    def test_broken_state_file_is_ignored_with_a_warning(
+        self, mock_fc_cls, tmp_path, caplog, content
+    ):
+        (tmp_path / "fritz.box.json").write_text(content)
+        setup_fc(mock_fc_cls, log_xml(CONNECTED))
+
+        assert len(poll(DeviceExtractor(device(), tmp_path))) == 1
+        assert "state file" in caplog.text
+
+    def test_unwritable_state_dir_warns_once_and_keeps_going(self, mock_fc_cls, tmp_path, caplog):
+        blocked = tmp_path / "file"
+        blocked.write_text("")
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(CONNECTED), log_xml(LOGIN, CONNECTED))
+        extractor = DeviceExtractor(device(), blocked)
+
+        assert len(poll(extractor)) == 1
+        assert poll(extractor) == []
+        assert len(poll(extractor)) == 1
+        assert caplog.text.count("could not write the state file") == 1
 
 
 def read_polls(directory):
@@ -183,11 +355,11 @@ def read_polls(directory):
 class TestCapture:
     def test_each_poll_is_logged_and_each_distinct_body_stored_once(self, mock_fc_cls, tmp_path):
         first, second = log_xml(CONNECTED), log_xml(LOGIN, CONNECTED)
-        setup_fc(mock_fc_cls, first, first, second, device_info=INFO)
-        extractor = DeviceExtractor(device(name="Fritz!Box 7690"), tmp_path)
+        setup_fc(mock_fc_cls, first, first, second)
+        extractor = DeviceExtractor(device(name="Fritz!Box 7690"), capture_dir=tmp_path)
 
         for _ in range(3):
-            extractor.poll()
+            poll(extractor)
 
         directory = tmp_path / "Fritz_Box_7690"
         polls = read_polls(directory)
@@ -202,49 +374,43 @@ class TestCapture:
         )
 
     def test_files_are_private(self, mock_fc_cls, tmp_path):
-        setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=INFO)
+        setup_fc(mock_fc_cls, log_xml(CONNECTED))
 
-        DeviceExtractor(device(), tmp_path).poll()
+        DeviceExtractor(device(), capture_dir=tmp_path).poll()
 
         directory = tmp_path / "Box"
         assert directory.stat().st_mode & 0o777 == 0o700
         assert {f.stat().st_mode & 0o777 for f in directory.iterdir()} == {0o600}
 
     def test_body_the_parser_rejects_is_kept(self, mock_fc_cls, tmp_path):
-        setup_fc(mock_fc_cls, b"<html>login</html>", device_info=INFO)
+        setup_fc(mock_fc_cls, b"<html>login</html>")
 
         with pytest.raises(ExtractionError):
-            DeviceExtractor(device(), tmp_path).poll()
+            DeviceExtractor(device(), capture_dir=tmp_path).poll()
 
         polls = read_polls(tmp_path / "Box")
         assert (tmp_path / "Box" / polls[0]["file"]).read_bytes() == b"<html>login</html>"
 
-    def test_missing_device_info_is_logged_as_null(self, mock_fc_cls, tmp_path):
-        setup_fc(mock_fc_cls, log_xml(CONNECTED))
-
-        DeviceExtractor(device(), tmp_path).poll()
-
-        assert read_polls(tmp_path / "Box")[0]["uptime"] is None
-
     def test_storage_error_does_not_stop_extraction(self, mock_fc_cls, tmp_path, caplog):
-        setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=INFO)
+        setup_fc(mock_fc_cls, log_xml(CONNECTED))
         blocked = tmp_path / "file"
         blocked.write_text("")
 
-        assert len(DeviceExtractor(device(), blocked).poll()) == 1
+        assert len(DeviceExtractor(device(), capture_dir=blocked).poll()) == 1
         assert "Box: could not store the snapshot" in caplog.text
 
     def test_failed_polls_are_logged_with_the_error(self, mock_fc_cls, tmp_path):
-        setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=INFO)
-        fc = mock_fc_cls.return_value
-        fc.session.get.side_effect = [
+        # GetInfo is asked only after the log came through.
+        setup_fc(mock_fc_cls, device_info=[NO_INFO, INFO])
+        mock_fc_cls.return_value.session.get.side_effect = [
             response(b"", 503),
             RequestsConnectionError("refused"),
             response(log_xml(CONNECTED)),
+            response(log_xml(CONNECTED)),
         ]
-        extractor = DeviceExtractor(device(), tmp_path)
+        extractor = DeviceExtractor(device(), capture_dir=tmp_path)
 
-        for _ in range(2):
+        for _ in range(3):
             with pytest.raises(ExtractionError):
                 extractor.poll()
         extractor.poll()
@@ -253,27 +419,33 @@ class TestCapture:
         assert [p.get("error") for p in polls] == [
             "HTTP 503",
             "could not read the event log (ConnectionError)",
+            "could not read the event log (FritzActionError)",
             None,
         ]
         assert "uptime" not in polls[0]
-        assert polls[2]["uptime"] == 3600
+        assert polls[3]["uptime"] == 3600
 
     def test_failure_to_log_a_failed_poll_is_only_a_warning(self, mock_fc_cls, tmp_path, caplog):
-        setup_fc(mock_fc_cls, b"", device_info=INFO)
+        setup_fc(mock_fc_cls)
         mock_fc_cls.return_value.session.get.side_effect = [response(b"", 500)]
         blocked = tmp_path / "file"
         blocked.write_text("")
 
         with pytest.raises(ExtractionError, match="HTTP 500"):
-            DeviceExtractor(device(), blocked).poll()
+            DeviceExtractor(device(), capture_dir=blocked).poll()
         assert "Box: could not log the failed poll" in caplog.text
 
-    def test_without_capture_dir_no_device_info_is_read(self, mock_fc_cls):
-        fc = setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=INFO)
 
-        DeviceExtractor(device()).poll()
-
-        assert all(c.args[:2] != ("DeviceInfo1", "GetInfo") for c in fc.call_action.call_args_list)
+@pytest.fixture
+def config_file(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        f"state_dir: {tmp_path / 'state'}\n"
+        "devices:\n"
+        "  - name: Fritz!Box 7590\n    hostname: fritz.box\n    username: u\n    password: p\n"
+        "  - name: Repeater\n    hostname: repeater.local\n    username: u\n    password: p\n"
+    )
+    return str(path)
 
 
 @patch("fritzlogextractor.extractor.FritzConnection")
@@ -290,6 +462,16 @@ class TestMain:
         assert [json.loads(line)["id"] for line in lines] == [22, 504]
         assert "Broken: could not read the event log (Timeout), will retry" in caplog.text
 
+    def test_poll_all_commits_only_after_writing(self, mock_fc_cls, capsys):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(CONNECTED))
+        extractor = DeviceExtractor(device())
+
+        with patch("sys.stdout.write", side_effect=BrokenPipeError):
+            poll_all([extractor])
+        poll_all([extractor])
+
+        assert [json.loads(line)["id"] for line in capsys.readouterr().out.splitlines()] == [22]
+
     def test_poll_all_survives_unexpected_errors(self, mock_fc_cls, capsys, caplog):
         setup_fc(mock_fc_cls, log_xml(CONNECTED))
         buggy = MagicMock(spec=DeviceExtractor)
@@ -302,18 +484,24 @@ class TestMain:
         assert "Buggy: unexpected error, will retry" in caplog.text
         assert "TypeError: fromisoformat" in caplog.text
 
-    def test_once_reads_each_device_and_exits(self, mock_fc_cls, capsys):
+    def test_once_reads_each_device_and_exits(self, mock_fc_cls, capsys, config_file, tmp_path):
         setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(LOGIN))
 
-        main(["--config", "tests/conffiles/validconfig.yaml", "--once"])
+        main(["--config", config_file, "--once"])
 
         lines = capsys.readouterr().out.splitlines()
         assert [json.loads(line)["device"] for line in lines] == ["Fritz!Box 7590", "Repeater"]
+        assert sorted(f.name for f in (tmp_path / "state").iterdir()) == [
+            "fritz.box.json",
+            "repeater.local.json",
+        ]
 
-    def test_capture_option_stores_snapshots_per_device(self, mock_fc_cls, tmp_path, capsys):
-        setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(LOGIN), device_info=INFO)
+    def test_capture_option_stores_snapshots_per_device(
+        self, mock_fc_cls, tmp_path, capsys, config_file
+    ):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(LOGIN))
 
-        main(["--config", "tests/conffiles/validconfig.yaml", "--once", "--capture", str(tmp_path)])
+        main(["--config", config_file, "--once", "--capture", str(tmp_path / "cap")])
 
         assert len(capsys.readouterr().out.splitlines()) == 2
-        assert sorted(d.name for d in tmp_path.iterdir()) == ["Fritz_Box_7590", "Repeater"]
+        assert sorted(d.name for d in (tmp_path / "cap").iterdir()) == ["Fritz_Box_7590", "Repeater"]
