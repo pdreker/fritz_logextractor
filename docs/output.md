@@ -1,16 +1,18 @@
 # Output
 
-Each new log entry becomes one JSON object on one line of stdout. The tool's own messages go to
-stderr.
+Each new log entry becomes one JSON object on one line of stdout, marked `"kind": "event"`. The
+tool's own messages go to stderr, also as JSON lines but marked `"kind": "log"`, see
+[Own log lines](#own-log-lines).
 
 ```json
-{"event_time": "2026-10-09T08:31:57+02:00", "time_estimated": false, "box_time": "09.10.26 08:31:57", "device": "fritz.box", "host": "fritz.box", "serial": "...", "group": "net", "id": 22, "msg": "Internetverbindung wurde erfolgreich hergestellt. ...", "repeat": 1}
+{"kind": "event", "event_time": "2026-10-09T08:31:57+02:00", "time_estimated": false, "box_time": "09.10.26 08:31:57", "device": "fritz.box", "host": "fritz.box", "serial": "...", "group": "net", "id": 22, "msg": "Internetverbindung wurde erfolgreich hergestellt. ...", "repeat": 1}
 ```
 
 ## Fields
 
 | Field | Meaning |
 |---|---|
+| `kind` | Always `event`; the tool's own log lines say `log` |
 | `event_time` | When it happened, ISO 8601 with the box's UTC offset (without one if the box does not tell its time zone) |
 | `time_estimated` | `true` for entries the box logged after a reboot, before it had synced its clock; see [below](#entries-before-time-sync) |
 | `box_time` | The time as the box shows it |
@@ -54,6 +56,30 @@ own yet, `event_time` is in UTC.
 A FRITZ!Box that is mesh master also shows the log of its repeaters, as rows starting with
 `[fritz.repeater]`. Polling the box is enough; polling the repeaters as well gives their entries
 twice.
+
+## Own log lines
+
+The tool logs to stderr, by default as one JSON object per line:
+
+```json
+{"time": "2026-10-31T16:30:51.485+00:00", "kind": "log", "level": "INFO", "logger": "fritzlogextractor", "msg": "Configured 1 device(s), polling every 60s"}
+```
+
+| Field | Meaning |
+|---|---|
+| `time` | When it was logged, in UTC |
+| `kind` | Always `log` |
+| `level` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL` |
+| `logger` | Which part logged it, e.g. `fritzlogextractor.extractor`, or a library such as `urllib3` |
+| `msg` | The message |
+| `exc` | Only on errors with a traceback: the traceback, in the same line |
+
+So a log stack that gets stdout and stderr mixed can still sort events and log lines apart on
+`kind`. For reading in a terminal, `--log-format text` switches to the classic format:
+
+```text
+2026-10-31 17:30:51,485     INFO fritzlogextractor | Configured 1 device(s), polling every 60s
+```
 
 ## Own logins
 

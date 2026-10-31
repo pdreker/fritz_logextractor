@@ -5,6 +5,8 @@ requirements.txt
 
 # Raw event log snapshots from --capture (unredacted)
 /capture/
+# State files of local runs (hold message text from the box)
+/state/
 
 # Claude Code local settings (personal allowlists etc.)
 .claude/settings.local.json

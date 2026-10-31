@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fritzlogextractor.config import ConfigError, ExtractorConfig, get_config
 from fritzlogextractor.extractor import DeviceExtractor, ExtractionError
+from fritzlogextractor.logs import LOG_FORMATS, setup_logging
 
 from . import __version__
 
@@ -28,6 +29,13 @@ def parse_cmdline(argv: list[str] | None = None) -> argparse.Namespace:
         help="Override the log level from the configuration",
     )
     parser.add_argument(
+        "--log-format",
+        choices=LOG_FORMATS,
+        default="json",
+        help="Format of the tool's own log lines on stderr: json (default, marked "
+        '"kind": "log") or text, easier to read in a terminal',
+    )
+    parser.add_argument(
         "--once", action="store_true", help="Read each device once, print its log and exit"
     )
     parser.add_argument(
@@ -40,17 +48,10 @@ def parse_cmdline(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def setup_logging(level: str) -> None:
-    # Diagnostics go to stderr; stdout is reserved for the extracted events.
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)8s %(name)s | %(message)s", stream=sys.stderr
-    )
-    logging.getLogger().setLevel(level)
-
-
 def main(argv: list[str] | None = None) -> None:
     args = parse_cmdline(argv)
-    setup_logging(args.log_level or "INFO")
+    # Diagnostics go to stderr; stdout is reserved for the extracted events.
+    setup_logging(args.log_level or "INFO", args.log_format)
 
     try:
         config = get_config(args.config)
