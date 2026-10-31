@@ -4,6 +4,8 @@ The tool can serve metrics for Prometheus. They tell whether it keeps up with ea
 it last read the log, why polls fail, whether the box rebooted while nobody watched. What the
 box logged is in the events; a log stack counts those better (see [Log collectors](collectors.md)).
 
+The [Grafana dashboard](dashboard.md) shows them together with the events.
+
 The metrics are off unless you set a port:
 
 ```yaml

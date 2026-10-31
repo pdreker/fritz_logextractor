@@ -40,3 +40,4 @@ podman run --rm \
 - [Configuration](configuration.md): config file or environment, all options.
 - [Output](output.md): what each field means, repeats, mesh, own logins.
 - [Metrics](metrics.md): optional Prometheus endpoint about the tool's own work.
+- [Grafana dashboard](dashboard.md): metrics and events on one page, with filters and search.

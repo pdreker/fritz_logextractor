@@ -16,6 +16,13 @@ discovery.relabel "fritzlogextractor" {
 		source_labels = ["__meta_kubernetes_namespace"]
 		target_label  = "namespace"
 	}
+
+	// As the other sources; Loki derives service_name="fritzlogextractor" from it,
+	// which the Grafana dashboard looks for.
+	rule {
+		target_label = "job"
+		replacement  = "fritzlogextractor"
+	}
 }
 
 loki.source.kubernetes "fritzlogextractor" {

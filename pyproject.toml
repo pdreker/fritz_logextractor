@@ -124,6 +124,10 @@ select = [
 ]
 ignore = ["E203", "COM812", "ISC001", "ANN204"]
 
+[tool.ruff.lint.per-file-ignores]
+# A standalone script, not a package; its panel builders take many keyword options.
+"examples/grafana/build_dashboard.py" = ["INP001", "PLR0913"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
