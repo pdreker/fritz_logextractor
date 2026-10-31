@@ -283,8 +283,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "orange",
@@ -311,7 +315,7 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "auto",
         "justifyMode": "center",
         "orientation": "auto",
         "wideLayout": true
@@ -383,7 +387,7 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "auto",
         "justifyMode": "center",
         "orientation": "auto",
         "wideLayout": true
@@ -447,7 +451,7 @@
         },
         "colorMode": "none",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "auto",
         "justifyMode": "center",
         "orientation": "auto",
         "wideLayout": true
@@ -511,7 +515,7 @@
         },
         "colorMode": "none",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "auto",
         "justifyMode": "center",
         "orientation": "auto",
         "wideLayout": true
@@ -555,8 +559,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -579,7 +587,7 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "auto",
         "justifyMode": "center",
         "orientation": "auto",
         "wideLayout": true
@@ -623,8 +631,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -647,7 +659,7 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "auto",
         "justifyMode": "center",
         "orientation": "auto",
         "wideLayout": true
@@ -711,7 +723,7 @@
         },
         "colorMode": "none",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "auto",
         "justifyMode": "center",
         "orientation": "auto",
         "wideLayout": true
@@ -755,8 +767,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "orange",
@@ -783,7 +799,7 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "auto",
         "justifyMode": "center",
         "orientation": "auto",
         "wideLayout": true
@@ -983,7 +999,8 @@
               "group": "A"
             },
             "axisSoftMin": 0
-          }
+          },
+          "noValue": "No failed polls"
         },
         "overrides": [
           {
@@ -1299,6 +1316,7 @@
         }
       },
       "interval": "1m",
+      "maxDataPoints": 100,
       "id": 16,
       "gridPos": {
         "x": 0,
@@ -1390,7 +1408,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "{${stream:raw}, kind=\"event\", device=~\"$device\", group=~\"$group\"} | json id=\"id\", msg=\"msg\", repeat=\"repeat\", time_estimated=\"time_estimated\" | id=~\"$id\" |~ `(?i)${search:regex}` | line_format \"[{{.group}} {{.id}}] {{.msg}}{{ if ne .repeat \\\"1\\\" }} (×{{.repeat}}){{ end }}\"",
+          "expr": "{${stream:raw}, kind=\"event\", device=~\"$device\", group=~\"$group\"} | json id=\"id\", msg=\"msg\", repeat=\"repeat\", time_estimated=\"time_estimated\" | id=~\"$id\" |~ `(?i)${search:regex}` | label_format level=\"info\" | line_format \"[{{.group}} {{.id}}] {{.msg}}{{ if ne .repeat \\\"1\\\" }} (×{{.repeat}}){{ end }}\"",
           "refId": "A",
           "queryType": "range"
         }
