@@ -747,8 +747,10 @@ tool's own messages go to stderr, also as JSON lines but marked <code>"kind": "l
 </tbody>
 </table>
 <p>Every field comes from the box and may hold text typed by someone else, for example a user name
-in a failed login. JSON encoding escapes it, so it cannot break a line. DynDNS update tokens
-(<code>q=...</code>) are replaced by <code>q=&lt;redacted&gt;</code>.</p>
+in a failed login. JSON encoding escapes it, so it cannot break a line. URLs keep only scheme
+and host (<code>https://ddns.example.com/&lt;redacted&gt;</code>): a DynDNS update URL can carry user name,
+password or token anywhere after the host. A DynDNS token outside a URL (<code>q=...</code>) becomes
+<code>q=&lt;redacted&gt;</code>.</p>
 <h2 id="repeats">Repeats<a class="headerlink" href="#repeats" title="Permanent link">&para;</a></h2>
 <p>When the same message comes again right away, the box does not add a row: it bumps a counter on
 the existing row (<code>[3 Meldungen seit …]</code>) and moves the row to the time of the latest

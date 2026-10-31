@@ -631,7 +631,7 @@ under <code>devices</code> describes one device:</p>
 <span class="w">    </span><span class="nt">hostname</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.168.123.1</span>
 <span class="w">    </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">logreader</span>
 <span class="w">    </span><span class="nt">password</span><span class="p">:</span><span class="w"> </span><span class="s">"..."</span>
-<span class="w">    </span><span class="nt">connection_timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span><span class="w">      </span><span class="c1"># no timeout</span>
+<span class="w">    </span><span class="nt">connection_timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">      </span><span class="c1"># seconds</span>
 </code></pre></div>
 <p>Only <code>username</code> and one of <code>password</code> or <code>password_file</code> are required per device; every other
 key falls back to the defaults below. An unknown key, such as a typo, stops the tool with an
@@ -696,7 +696,7 @@ fritzlogextractor
 <tr>
 <td><code>devices[].connection_timeout</code></td>
 <td><code>FRITZ_CONNECTION_TIMEOUT</code></td>
-<td><code>10</code> (<code>0</code> disables it)</td>
+<td><code>10</code> (seconds, at least 1)</td>
 </tr>
 <tr>
 <td><code>devices[].use_tls</code></td>
