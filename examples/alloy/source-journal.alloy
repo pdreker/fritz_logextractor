@@ -1,0 +1,19 @@
+// The container named "fritzlogextractor" from the systemd journal, where
+// Podman writes container logs by default (also for Quadlets). Alloy needs
+// read access to /var/log/journal.
+loki.relabel "fritzlogextractor" {
+	forward_to = []
+
+	rule {
+		source_labels = ["__journal_container_name"]
+		regex         = "fritzlogextractor"
+		action        = "keep"
+	}
+}
+
+loki.source.journal "fritzlogextractor" {
+	path          = "/var/log/journal"
+	relabel_rules = loki.relabel.fritzlogextractor.rules
+	labels        = {job = "fritzlogextractor"}
+	forward_to    = [loki.process.fritzlogextractor.receiver]
+}

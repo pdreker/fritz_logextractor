@@ -1,0 +1,22 @@
+// The container named "fritzlogextractor", read from Docker or from Podman's
+// Docker-compatible socket (mount it at /var/run/docker.sock).
+discovery.docker "containers" {
+	host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "fritzlogextractor" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/fritzlogextractor"
+		action        = "keep"
+	}
+}
+
+loki.source.docker "fritzlogextractor" {
+	host       = "unix:///var/run/docker.sock"
+	targets    = discovery.relabel.fritzlogextractor.output
+	labels     = {job = "fritzlogextractor"}
+	forward_to = [loki.process.fritzlogextractor.receiver]
+}

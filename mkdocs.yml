@@ -11,6 +11,7 @@ nav:
   - Running: running.md
   - Configuration: configuration.md
   - Output: output.md
+  - Log collectors: collectors.md
   - Capturing snapshots: capture.md
   - Development: development.md
 
@@ -42,6 +43,9 @@ markdown_extensions:
   - attr_list
   - pymdownx.details
   - pymdownx.highlight
+  - pymdownx.snippets:
+      base_path: [examples]
+      check_paths: true
   - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true

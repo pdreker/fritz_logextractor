@@ -1,0 +1,55 @@
+// fritz_logextractor: sort its lines into the box's events and the tool's own
+// log, take each line's time from the line itself and send both to Loki.
+// Combine this file with one source-*.alloy; Alloy loads every .alloy file of
+// a directory: alloy run /etc/alloy/
+loki.process "fritzlogextractor" {
+	forward_to = [loki.write.default.receiver]
+
+	stage.json {
+		expressions = {
+			kind       = "",
+			device     = "",
+			group      = "",
+			level      = "",
+			event_time = "",
+			time       = "",
+		}
+	}
+
+	// Few labels on purpose: kind ("event" or "log"), device and group for
+	// events, level for the tool's own log. Everything else stays in the line;
+	// query it with "| json".
+	stage.labels {
+		values = {
+			kind   = "",
+			device = "",
+			group  = "",
+			level  = "",
+		}
+	}
+
+	// Events: when the box logged them, not when they were read.
+	stage.match {
+		selector = "{kind=\"event\"}"
+
+		stage.timestamp {
+			source = "event_time"
+			format = "RFC3339"
+		}
+	}
+
+	stage.match {
+		selector = "{kind=\"log\"}"
+
+		stage.timestamp {
+			source = "time"
+			format = "RFC3339"
+		}
+	}
+}
+
+loki.write "default" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
