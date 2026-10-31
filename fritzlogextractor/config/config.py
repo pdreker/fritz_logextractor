@@ -12,6 +12,7 @@ from attrs import converters, define, field, validators
 
 from .exceptions import (
     ConfigFileUnreadableError,
+    ConfigNotAMappingError,
     EmptyConfigError,
     FritzPasswordFileDoesNotExistError,
     FritzPasswordMissingError,
@@ -30,22 +31,16 @@ DEFAULT_POLL_INTERVAL: int = 60
 DEFAULT_STATE_DIR: str = "/var/lib/fritzlogextractor"
 
 
-def _convert_optional_int(value: int | str | None) -> int | None:
-    if value is None:
-        return None
-    number = int(value)
-    if number == 0:
-        return None
-    return number
-
-
 def _read_config_file(config_file_path: str) -> dict[str, Any]:
     try:
         with Path(config_file_path).open() as config_file:
             config = yaml.safe_load(config_file)
     except OSError as e:
-        logger.exception("Config file specified but could not be read.")
-        raise ConfigFileUnreadableError from e
+        msg = f"cannot read {config_file_path}: {e.strerror}"
+        raise ConfigFileUnreadableError(msg) from e
+    except yaml.YAMLError as e:
+        msg = f"{config_file_path} is not valid YAML: {e}"
+        raise ConfigFileUnreadableError(msg) from e
     logger.info("Read configuration from %s.", config_file_path)
     return config
 
@@ -81,8 +76,11 @@ def _read_config_from_env() -> dict[str, Any]:
     return config
 
 
-def _check_keys(config: dict[str, Any], cls: type, where: str) -> None:
-    """Refuse keys the config class does not have: a typo would go unnoticed."""
+def _checked_mapping(config: object, cls: type, where: str) -> dict[str, Any]:
+    """``config`` if it is a mapping of keys ``cls`` has: a typo would go unnoticed."""
+    if not isinstance(config, dict):
+        msg = f"{where}: expected a mapping of keys to values, got {type(config).__name__}"
+        raise ConfigNotAMappingError(msg)
     known = [a.name for a in attrs.fields(cls)]
     for key in config:
         if key not in known:
@@ -90,6 +88,7 @@ def _check_keys(config: dict[str, Any], cls: type, where: str) -> None:
             hint = f", did you mean '{close[0]}'?" if close else ""
             msg = f"{where}: unknown key '{key}'{hint}"
             raise UnknownConfigKeyError(msg)
+    return config
 
 
 def get_config(config_file_path: str | None) -> ExtractorConfig:
@@ -105,10 +104,10 @@ class DeviceConfig:
     password_file: str | None = field(default=None)
     # Defaults to the hostname.
     name: str = ""
-    connection_timeout: int | None = field(
-        default=DEFAULT_CONNECTION_TIMEOUT,
-        converter=_convert_optional_int,
-        validator=validators.optional(validators.ge(1)),
+    # Always set: devices are polled one after the other, so a box that does not
+    # answer would hold up all others.
+    connection_timeout: int = field(
+        default=DEFAULT_CONNECTION_TIMEOUT, converter=int, validator=validators.ge(1)
     )
     use_tls: bool = field(default=False, converter=converters.to_bool)
 
@@ -132,11 +131,11 @@ class DeviceConfig:
             self.name = self.hostname
 
     @classmethod
-    def from_config(cls, device: dict[str, Any], where: str = "device") -> DeviceConfig:
-        hostname = device.get("hostname")
+    def from_config(cls, config: object, where: str = "device") -> DeviceConfig:
+        hostname = config.get("hostname") if isinstance(config, dict) else None
         if isinstance(hostname, str) and hostname:
             where = f"{where} ({hostname})"
-        _check_keys(device, cls, where)
+        device = _checked_mapping(config, cls, where)
         return cls(
             hostname=device.get("hostname", "fritz.box"),
             username=device.get("username", ""),
@@ -152,7 +151,9 @@ class DeviceConfig:
 class ExtractorConfig:
     devices: list[DeviceConfig] = field(factory=list)
     log_level: str = field(
-        default="INFO", validator=validators.in_(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        default="INFO",
+        converter=str.upper,
+        validator=validators.in_(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
     )
     poll_interval: int = field(
         default=DEFAULT_POLL_INTERVAL, converter=int, validator=validators.ge(10)
@@ -166,15 +167,19 @@ class ExtractorConfig:
             raise NoDevicesFoundError(msg)
 
     @classmethod
-    def from_config(cls, config: dict[str, Any] | None) -> ExtractorConfig:
-        if config is None:
+    def from_config(cls, data: object) -> ExtractorConfig:
+        if data is None:
             msg = "No config found (check env vars or config file)."
             raise EmptyConfigError(msg)
-        _check_keys(config, cls, "config")
+        config = _checked_mapping(data, cls, "config")
+        devices = config.get("devices") or []
+        if not isinstance(devices, list):
+            msg = f"config: devices must be a list, got {type(devices).__name__}"
+            raise ConfigNotAMappingError(msg)
         return cls(
             devices=[
                 DeviceConfig.from_config(dev, f"device {n}")
-                for n, dev in enumerate(config.get("devices") or [], start=1)
+                for n, dev in enumerate(devices, start=1)
             ],
             log_level=config.get("log_level", "INFO"),
             poll_interval=config.get("poll_interval", DEFAULT_POLL_INTERVAL),

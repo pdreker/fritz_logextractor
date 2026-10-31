@@ -9,6 +9,10 @@ class ConfigFileUnreadableError(ConfigError):
     pass
 
 
+class ConfigNotAMappingError(ConfigError):
+    pass
+
+
 class EmptyConfigError(ConfigError):
     pass
 

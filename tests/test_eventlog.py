@@ -187,13 +187,27 @@ class TestRecord:
         assert "\x00" not in line
         assert json.loads(line)["msg"] == evil
 
-    def test_ddns_token_is_redacted(self):
-        msg = "update https://ddns.example.invalid/u?domain=h&q=not-a-real-token&ip=192.0.2.1"
-
-        rec = record(self.event(msg))
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://ddns.example.invalid/u?domain=h&q=not-a-real-token&ip=192.0.2.1",
+            "https://ddns.example.invalid/nic/update?hostname=h&password=not-a-real-token",
+            "https://ddns.example.invalid/update/not-a-real-token",
+            "http://user:not-a-real-token@ddns.example.invalid:8080/nic/update",
+        ],
+    )
+    def test_urls_keep_only_scheme_and_host(self, url):
+        rec = record(self.event(f"DynDNS-Fehler: {url} antwortet nicht."))
 
         assert "not-a-real-token" not in rec["msg"]
-        assert "&q=<redacted>&ip=192.0.2.1" in rec["msg"]
+        host = url.split("@")[-1].split("://")[-1].split("/")[0]
+        scheme = url.split("://")[0]
+        assert rec["msg"] == f"DynDNS-Fehler: {scheme}://{host}/<redacted> antwortet nicht."
+
+    def test_url_without_path_stays(self):
+        assert record(self.event("see https://ddns.example.invalid"))["msg"] == (
+            "see https://ddns.example.invalid"
+        )
 
     def test_token_at_start_is_redacted_but_other_q_words_are_not(self):
         assert record(self.event("q=abc123"))["msg"] == "q=<redacted>"

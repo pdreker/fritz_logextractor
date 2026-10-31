@@ -2,6 +2,7 @@ import pytest
 
 from fritzlogextractor.config import (
     ConfigFileUnreadableError,
+    ConfigNotAMappingError,
     EmptyConfigError,
     FritzPasswordFileDoesNotExistError,
     FritzPasswordMissingError,
@@ -33,11 +34,42 @@ class TestFileConfig:
         assert [d.hostname for d in config.devices] == ["fritz.box", "repeater.local"]
         assert config.devices[0].use_tls is True
         assert config.devices[0].connection_timeout == 10
-        assert config.devices[1].connection_timeout is None
+        assert config.devices[1].connection_timeout == 5
 
     def test_unreadable_file(self):
-        with pytest.raises(ConfigFileUnreadableError):
+        with pytest.raises(ConfigFileUnreadableError, match="cannot read .*does-not-exist.yaml"):
             get_config("tests/conffiles/does-not-exist.yaml")
+
+    def test_invalid_yaml(self, tmp_path):
+        bad = tmp_path / "bad.yaml"
+        bad.write_text("devices: [\n")
+
+        with pytest.raises(ConfigFileUnreadableError, match="not valid YAML"):
+            get_config(str(bad))
+
+    @pytest.mark.parametrize(
+        ("data", "where"),
+        [
+            (["a", "b"], "config"),
+            ({"devices": "fritz.box"}, "devices must be a list"),
+            ({"devices": ["fritz.box"]}, "device 1"),
+        ],
+    )
+    def test_wrong_structure_is_a_config_error(self, data, where):
+        with pytest.raises(ConfigNotAMappingError, match=where):
+            ExtractorConfig.from_config(data)
+
+    @pytest.mark.parametrize("timeout", [0, -1])
+    def test_connection_timeout_must_be_positive(self, timeout):
+        device = {"username": "u", "password": "p", "connection_timeout": timeout}
+        with pytest.raises(ValueError, match="connection_timeout"):
+            ExtractorConfig.from_config({"devices": [device]})
+
+    def test_log_level_ignores_case(self):
+        device = {"username": "u", "password": "p"}
+        assert ExtractorConfig.from_config({"devices": [device], "log_level": "debug"}).log_level == (
+            "DEBUG"
+        )
 
     def test_empty_config(self):
         with pytest.raises(EmptyConfigError):

@@ -2,6 +2,7 @@ from .config import DeviceConfig, ExtractorConfig, get_config
 from .exceptions import (
     ConfigError,
     ConfigFileUnreadableError,
+    ConfigNotAMappingError,
     EmptyConfigError,
     FritzPasswordFileDoesNotExistError,
     FritzPasswordMissingError,
@@ -13,6 +14,7 @@ from .exceptions import (
 __all__ = [
     "ConfigError",
     "ConfigFileUnreadableError",
+    "ConfigNotAMappingError",
     "DeviceConfig",
     "EmptyConfigError",
     "ExtractorConfig",

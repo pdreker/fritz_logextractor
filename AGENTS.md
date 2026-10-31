@@ -134,7 +134,8 @@ Other models and firmware not yet checked.
 - **Own logins.** The tool's TR-064 login shows up as a row (`id` 506/507, "Anmeldung einer
   App"), once per session, not on every poll.
 - **Sensitive content.** Messages embed WAN addresses, host and user names, and DynDNS update
-  URLs including the token (`q=…`), which must be redacted.
+  URLs including the token (`q=…`). URLs are cut down to scheme and host, since other providers
+  put credentials in the user info, path or other parameters.
 
 ### Duplicate handling
 

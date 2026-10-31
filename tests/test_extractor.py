@@ -7,7 +7,7 @@ import pytest
 from fritzconnection.core.exceptions import FritzActionError, FritzConnectionException
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
-from fritzlogextractor.__main__ import main, poll_all
+from fritzlogextractor.__main__ import OutputError, main, poll_all
 from fritzlogextractor.config import DeviceConfig
 from fritzlogextractor.extractor import DeviceExtractor, ExtractionError
 
@@ -38,7 +38,8 @@ def response(body: bytes, status: int = 200) -> MagicMock:
     resp = MagicMock()
     resp.ok = status < 400
     resp.status_code = status
-    resp.content = body
+    resp.iter_content.return_value = [body]
+    resp.__enter__.return_value = resp
     return resp
 
 
@@ -107,7 +108,9 @@ class TestDeviceExtractor:
 
         DeviceExtractor(device(connection_timeout=7)).poll()
 
-        fc.session.get.assert_called_once_with(f"http://fritz.box:49000{LOG_PATH}", timeout=7)
+        fc.session.get.assert_called_once_with(
+            f"http://fritz.box:49000{LOG_PATH}", timeout=7, stream=True
+        )
         assert mock_fc_cls.call_args.kwargs == {
             "address": "fritz.box",
             "user": "u",
@@ -200,6 +203,31 @@ class TestDeviceExtractor:
         with pytest.raises(ExtractionError, match="HTTP 500"):
             extractor.poll()
         assert len(extractor.poll()) == 1
+
+    @pytest.mark.parametrize("path", ["@evil.example/x", "//evil.example/x", "devicelog.lua", None])
+    def test_log_path_must_be_a_plain_path(self, mock_fc_cls, path):
+        fc = setup_fc(mock_fc_cls, log_xml(CONNECTED))
+        call_action = fc.call_action.side_effect
+
+        def odd_path(service, action, **kwargs):
+            if action == "X_AVM-DE_GetDeviceLogPath":
+                return {"NewDeviceLogPath": path}
+            return call_action(service, action, **kwargs)
+
+        fc.call_action.side_effect = odd_path
+
+        with pytest.raises(ExtractionError, match="unexpected event log path"):
+            DeviceExtractor(device()).poll()
+        fc.session.get.assert_not_called()
+
+    def test_oversized_log_is_refused(self, mock_fc_cls):
+        setup_fc(mock_fc_cls)
+        big = response(b"")
+        big.iter_content.return_value = [b"x" * 1024 * 1024] * 9
+        mock_fc_cls.return_value.session.get.side_effect = [big]
+
+        with pytest.raises(ExtractionError, match="larger than"):
+            DeviceExtractor(device()).poll()
 
     def test_unparsable_body_raises(self, mock_fc_cls):
         setup_fc(mock_fc_cls, b"<html>login</html>")
@@ -312,6 +340,17 @@ class TestState:
 
         assert (tmp_path / "state").stat().st_mode & 0o777 == 0o700
         assert [f.name for f in (tmp_path / "state").iterdir()] == ["fritz.box.json"]
+        assert (tmp_path / "state" / "fritz.box.json").stat().st_mode & 0o777 == 0o600
+
+    def test_state_file_is_private_even_over_a_left_over_partial_file(self, mock_fc_cls, tmp_path):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED))
+        (tmp_path / "state").mkdir()
+        left_over = tmp_path / "state" / "fritz.box.tmp"
+        left_over.write_text("partial")
+        left_over.chmod(0o644)
+
+        poll(DeviceExtractor(device(), tmp_path / "state"))
+
         assert (tmp_path / "state" / "fritz.box.json").stat().st_mode & 0o777 == 0o600
 
     def test_state_of_another_device_is_ignored(self, mock_fc_cls, tmp_path):
@@ -466,11 +505,25 @@ class TestMain:
         setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(CONNECTED))
         extractor = DeviceExtractor(device())
 
-        with patch("sys.stdout.write", side_effect=BrokenPipeError):
+        with patch("sys.stdout.write", side_effect=BrokenPipeError), pytest.raises(OutputError):
             poll_all([extractor])
         poll_all([extractor])
 
         assert [json.loads(line)["id"] for line in capsys.readouterr().out.splitlines()] == [22]
+
+    def test_closed_stdout_ends_the_tool(self, mock_fc_cls, config_file, capsys):
+        setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(LOGIN))
+
+        with (
+            patch("sys.stdout.write", side_effect=BrokenPipeError),
+            patch("fritzlogextractor.__main__._discard_stdout") as discard,
+            pytest.raises(SystemExit) as exc,
+        ):
+            main(["--config", config_file, "--once"])
+
+        assert exc.value.code == 1
+        assert "Cannot write the events to stdout" in capsys.readouterr().err
+        discard.assert_called_once()
 
     def test_poll_all_survives_unexpected_errors(self, mock_fc_cls, capsys, caplog):
         setup_fc(mock_fc_cls, log_xml(CONNECTED))

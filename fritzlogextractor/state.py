@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import TYPE_CHECKING
 
@@ -17,7 +18,7 @@ from fritzlogextractor.tracker import EventLogTracker
 if TYPE_CHECKING:
     from pathlib import Path
 
-__all__ = ["StateFile", "safe_file_name"]
+__all__ = ["StateFile", "safe_file_name", "write_private"]
 
 logger = logging.getLogger("fritzlogextractor.state")
 
@@ -28,6 +29,19 @@ def safe_file_name(text: str) -> str:
     """``text`` with every character that could leave the directory replaced."""
     name = _UNSAFE_RE.sub("_", text)
     return name if name.strip(".") else "device"
+
+
+def write_private(path: Path, data: bytes) -> None:
+    """Replace ``path`` atomically with ``data``, readable by the owner only."""
+    partial = path.with_suffix(".tmp")
+    fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        # The mode of open() applies only to a new file, not to one left behind.
+        os.fchmod(f.fileno(), 0o600)
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    partial.replace(path)
 
 
 class StateFile:
@@ -60,10 +74,8 @@ class StateFile:
     def save(self, serial: str | None, tracker: EventLogTracker) -> None:
         """Write the state; raises ``OSError`` if that fails."""
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        partial = self.path.with_suffix(".tmp")
-        partial.touch(mode=0o600)
-        partial.write_text(json.dumps({"serial": serial, "tracker": tracker.to_json()}))
-        partial.replace(self.path)
+        state = {"serial": serial, "tracker": tracker.to_json()}
+        write_private(self.path, json.dumps(state).encode())
 
 
 # Copyright 2026 Patrick Dreker <patrick@dreker.de>

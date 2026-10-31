@@ -18,7 +18,7 @@ import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from fritzlogextractor.state import safe_file_name
+from fritzlogextractor.state import safe_file_name, write_private
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -40,10 +40,7 @@ class SnapshotCapture:
         digest = hashlib.sha256(body).hexdigest()
         snapshot = self.directory / f"{digest[:_DIGEST_PREFIX]}.xml"
         if not snapshot.exists():
-            partial = snapshot.with_suffix(".tmp")
-            partial.touch(mode=0o600)
-            partial.write_bytes(body)
-            partial.replace(snapshot)
+            write_private(snapshot, body)
 
         self._log_poll(
             {
