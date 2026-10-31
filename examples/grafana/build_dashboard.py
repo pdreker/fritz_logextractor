@@ -22,8 +22,9 @@ OUTPUT = HERE / "fritz-logextractor.json"
 PROM = {"type": "prometheus", "uid": "${datasource}"}
 LOKI = {"type": "loki", "uid": "${loki}"}
 DEV = 'device=~"$device"'
-# The streams of the tool in Loki. The collector examples label them job="fritzlogextractor";
-# the variable "stream" changes that for other setups.
+# The streams of the tool in Loki. Loki (3.0 and later) derives service_name from job when
+# nothing else sets it, so the collector examples' job="fritzlogextractor" gives
+# service_name="fritzlogextractor". The variable "stream" changes that for other setups.
 EVENTS = '{${stream:raw}, kind="event", ' + DEV + ', group=~"$group"}'
 OWN_LOG = '{${stream:raw}, kind="log", level=~"$level"}'
 # The fields Loki parses from an event line; not "device", "group", "kind": they are labels.
@@ -291,7 +292,7 @@ def variables() -> list[dict]:
         textbox(
             "stream",
             "Loki streams",
-            'job="fritzlogextractor"',
+            'service_name="fritzlogextractor"',
             "Label matcher for the tool's lines in Loki, as your collector labels them",
         ),
         query_variable(

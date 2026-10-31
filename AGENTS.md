@@ -196,8 +196,9 @@ state and prints the whole log again; the docs warn about it.
 `examples/grafana/build_dashboard.py` writes `fritz-logextractor.json` (as in fritz_exporter:
 edit the script, not the JSON); `tests/test_grafana_dashboard.py` checks the JSON is current,
 uses every metric of `metrics.py` and has no overlapping panels. Data sources and the Loki
-stream matcher are variables (`$stream`, default `job="fritzlogextractor"`, the label every
-Alloy source sets). Event fields other than the labels come from `| json` at query time; keep
+stream matcher are variables (`$stream`, default `service_name="fritzlogextractor"`: Loki ≥ 3.0
+derives it from the `job="fritzlogextractor"` every Alloy source sets, and setups that name the
+container fritzlogextractor and set `service_name` themselves match too). Event fields other than the labels come from `| json` at query time; keep
 `device`/`group`/`kind` out of it, they are labels already. Categorical colors are fixed per
 group and per error reason, steps that hold on Grafana's dark and light theme. Check queries
 against a real Loki and Prometheus after changing them.

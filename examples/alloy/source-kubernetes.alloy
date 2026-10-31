@@ -17,7 +17,8 @@ discovery.relabel "fritzlogextractor" {
 		target_label  = "namespace"
 	}
 
-	// As the other sources; the Grafana dashboard looks for this label.
+	// As the other sources; Loki derives service_name="fritzlogextractor" from it,
+	// which the Grafana dashboard looks for.
 	rule {
 		target_label = "job"
 		replacement  = "fritzlogextractor"

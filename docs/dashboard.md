@@ -31,12 +31,21 @@ Reboots of the box show as red marks on the time axis.
 | Variable | Meaning |
 |---|---|
 | Prometheus, Loki | The data sources |
-| Loki streams | Label matcher for the tool's lines in Loki; default `job="fritzlogextractor"`, as in the Alloy examples. Change it if your collector labels them otherwise, e.g. `service_name="fritzlogextractor"` |
+| Loki streams | Label matcher for the tool's lines in Loki; default `service_name="fritzlogextractor"`, see below |
 | Device | One, several or all devices; applies to metrics and events |
 | Group | `sys`, `net`, `wlan`, … |
 | Message id | Regular expression on the message id: `506` for one kind of message, `50[0-9]` for logins. The id does not depend on the box's language |
 | Search | Text the message contains, in any case. Matched literally |
 | Tool log level | Levels shown in the row *Tool log* |
+
+**Loki streams.** Loki 3.0 and later sets the label `service_name` on every stream: from
+`service_name` if the collector sets it, else from the first of `service`, `app`,
+`application`, `app_name`, `name`, `app_kubernetes_io_name`, `container`, `container_name`,
+`k8s_container_name`, `component`, `workload`, `job`, `k8s_job_name` that the stream has. The
+Alloy examples set only `job="fritzlogextractor"`, which gives
+`service_name="fritzlogextractor"`. If your collector sets one of the labels before `job` to
+something else, or you run an older Loki, change the variable, e.g. to
+`job="fritzlogextractor"`.
 
 Grafana keeps the filters in the URL, so a link to a filtered view can be shared.
 

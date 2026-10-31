@@ -82,18 +82,18 @@
         "name": "stream",
         "label": "Loki streams",
         "type": "textbox",
-        "query": "job=\"fritzlogextractor\"",
+        "query": "service_name=\"fritzlogextractor\"",
         "current": {
-          "text": "job=\"fritzlogextractor\"",
-          "value": "job=\"fritzlogextractor\""
+          "text": "service_name=\"fritzlogextractor\"",
+          "value": "service_name=\"fritzlogextractor\""
         },
         "description": "Label matcher for the tool's lines in Loki, as your collector labels them",
         "hide": 0,
         "options": [
           {
             "selected": true,
-            "text": "job=\"fritzlogextractor\"",
-            "value": "job=\"fritzlogextractor\""
+            "text": "service_name=\"fritzlogextractor\"",
+            "value": "service_name=\"fritzlogextractor\""
           }
         ]
       },
