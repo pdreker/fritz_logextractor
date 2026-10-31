@@ -479,6 +479,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../capture/" class="md-nav__link">
         
   
@@ -620,6 +647,7 @@ under <code>devices</code> describes one device:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">log_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">INFO</span>
 <span class="nt">poll_interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span><span class="w">              </span><span class="c1"># seconds between polls, at least 10</span>
 <span class="nt">state_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/var/lib/fritzlogextractor</span>
+<span class="nt">metrics_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9788</span><span class="w">             </span><span class="c1"># serve Prometheus metrics; leave out to turn them off</span>
 
 <span class="nt">devices</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Fritz!Box 7690</span><span class="w">       </span><span class="c1"># shown as "device" in each event; defaults to the hostname</span>
@@ -669,6 +697,16 @@ fritzlogextractor
 <td><code>/var/lib/fritzlogextractor</code></td>
 </tr>
 <tr>
+<td><code>metrics_port</code></td>
+<td><code>FRITZ_METRICS_PORT</code></td>
+<td><em>(none: no metrics)</em></td>
+</tr>
+<tr>
+<td><code>metrics_address</code></td>
+<td><code>FRITZ_METRICS_ADDRESS</code></td>
+<td><code>0.0.0.0</code> (all addresses)</td>
+</tr>
+<tr>
 <td><code>devices[].hostname</code></td>
 <td><code>FRITZ_HOSTNAME</code></td>
 <td><code>fritz.box</code></td>
@@ -708,6 +746,8 @@ fritzlogextractor
 <p><code>state_dir</code> holds one file per device, <code>&lt;hostname&gt;.json</code>. It must survive restarts and be
 writable; see <a href="../running/">Running</a>. The file holds message text from the box (addresses, host
 and user names) and is created readable by its owner only.</p>
+<p><code>metrics_port</code> turns on the <a href="../metrics/">metrics</a> for Prometheus on that port (1 to 65535);
+<code>metrics_address</code> is the address to listen on.</p>
 <p><code>use_tls</code> talks to the box over HTTPS. The tool does not check the box's certificate, since
 Fritz!Boxes come with a self-signed one.</p>
 
