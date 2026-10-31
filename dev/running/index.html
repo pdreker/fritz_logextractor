@@ -519,6 +519,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../collectors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Log collectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../capture/" class="md-nav__link">
         
   
@@ -921,6 +948,8 @@ run.</p>
 <code>event</code> or <code>log</code>, so they can be told apart even where the two streams end up mixed, as in a
 container's log or a terminal. A log stack keeps the lines with <code>"kind": "event"</code> as the box's
 log and the rest as the tool's own; see <a href="../output/#own-log-lines">Output</a>.</p>
+<p>Ready-made configs for Grafana Alloy, Vector, Fluentd and Logstash are in
+<a href="../collectors/">Log collectors</a>.</p>
 <p>In a terminal, the classic format is easier to read, and redirecting keeps the events apart:</p>
 <div class="highlight"><pre><span></span><code>fritzlogextractor<span class="w"> </span>--config<span class="w"> </span>config.yaml<span class="w"> </span>--log-format<span class="w"> </span>text<span class="w"> </span>&gt;<span class="w"> </span>events.jsonl<span class="w">   </span><span class="c1"># events to a file</span>
 fritzlogextractor<span class="w"> </span>--config<span class="w"> </span>config.yaml<span class="w"> </span>--log-format<span class="w"> </span>text<span class="w"> </span><span class="m">2</span>&gt;<span class="w"> </span>tool.log<span class="w">      </span><span class="c1"># own log to a file</span>
