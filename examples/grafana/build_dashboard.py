@@ -379,7 +379,9 @@ def status(layout: Layout) -> None:
             "Time since the last poll that read the log and wrote its events.",
             prom(f"time() - fritzlogextractor_last_success_timestamp_seconds{{{DEV}}}", now=True),
             unit="s",
-            steps=thresholds((None, "text"), (0, "green"), (180, "orange"), (STALLED_AFTER, "red")),
+            steps=thresholds(
+                (None, "transparent"), (0, "green"), (180, "orange"), (STALLED_AFTER, "red")
+            ),
         ),
         3,
         4,
@@ -430,7 +432,7 @@ def status(layout: Layout) -> None:
             "Rows of the last poll that failed validation. They are not emitted; the tool's log "
             "shows the first one.",
             prom(f"fritzlogextractor_rejected_rows{{{DEV}}}", now=True),
-            steps=thresholds((None, "text"), (0, "green"), (1, "red")),
+            steps=thresholds((None, "transparent"), (0, "green"), (1, "red")),
         ),
         3,
         4,
@@ -445,7 +447,7 @@ def status(layout: Layout) -> None:
                 f"fritzlogextractor_state_write_errors_total{{{DEV}}}[$__range])))",
                 now=True,
             ),
-            steps=thresholds((None, "text"), (0, "green"), (1, "red")),
+            steps=thresholds((None, "transparent"), (0, "green"), (1, "red")),
         ),
         3,
         4,
@@ -470,7 +472,9 @@ def status(layout: Layout) -> None:
             "box logged in that time is lost.",
             prom(f"fritzlogextractor_reboot_unwatched_seconds{{{DEV}}}", now=True),
             unit="s",
-            steps=thresholds((None, "text"), (0, "green"), (180, "orange"), (STALLED_AFTER, "red")),
+            steps=thresholds(
+                (None, "transparent"), (0, "green"), (180, "orange"), (STALLED_AFTER, "red")
+            ),
         ),
         2,
         4,
@@ -589,6 +593,8 @@ def events(layout: Layout) -> None:
         8,
         8,
     )
+    # Events have no level: Loki detects "unknown", and Grafana shows its detected_level
+    # before any level label, so that is what gets set.
     layout.add(
         logs(
             "Event log",
@@ -596,7 +602,7 @@ def events(layout: Layout) -> None:
             "all its fields. Filter with Device, Group, Message id and Search above.",
             loki(
                 f'{EVENTS} {EVENT_FIELDS} | id=~"$id" |~ `(?i)${{search:regex}}` '
-                '| label_format level="info" | line_format "[{{.group}} {{.id}}] {{.msg}}'
+                '| label_format detected_level="info" | line_format "[{{.group}} {{.id}}] {{.msg}}'
                 '{{ if ne .repeat \\"1\\" }} (\u00d7{{.repeat}}){{ end }}"'
             ),
         ),
