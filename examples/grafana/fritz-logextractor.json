@@ -283,7 +283,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "text",
+                "color": "transparent",
                 "value": null
               },
               {
@@ -559,7 +559,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "text",
+                "color": "transparent",
                 "value": null
               },
               {
@@ -631,7 +631,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "text",
+                "color": "transparent",
                 "value": null
               },
               {
@@ -767,7 +767,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "text",
+                "color": "transparent",
                 "value": null
               },
               {
@@ -1408,7 +1408,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "{${stream:raw}, kind=\"event\", device=~\"$device\", group=~\"$group\"} | json id=\"id\", msg=\"msg\", repeat=\"repeat\", time_estimated=\"time_estimated\" | id=~\"$id\" |~ `(?i)${search:regex}` | label_format level=\"info\" | line_format \"[{{.group}} {{.id}}] {{.msg}}{{ if ne .repeat \\\"1\\\" }} (×{{.repeat}}){{ end }}\"",
+          "expr": "{${stream:raw}, kind=\"event\", device=~\"$device\", group=~\"$group\"} | json id=\"id\", msg=\"msg\", repeat=\"repeat\", time_estimated=\"time_estimated\" | id=~\"$id\" |~ `(?i)${search:regex}` | label_format detected_level=\"info\" | line_format \"[{{.group}} {{.id}}] {{.msg}}{{ if ne .repeat \\\"1\\\" }} (×{{.repeat}}){{ end }}\"",
           "refId": "A",
           "queryType": "range"
         }
