@@ -55,14 +55,15 @@ Use `logging`, never `print()`. Exception messages are plain strings assigned to
 
 Records the design agreed when the project was started (October 2026).
 
-**Built (PoC):** `eventlog.py` (strict parser, in-memory tracker keyed on time + message,
-POSIX time zone rules, output record; adapted from fritz_exporter PR #719), `extractor.py` (fetch
-per device through fritzconnection's session), poll loop with `--once` in `__main__.py`,
-`capture.py` (`--capture DIR`: raw snapshots plus uptime per poll, to build test data from real
+**Built:** `eventlog.py` (strict parser that splits off the fold counter, POSIX time zone rules,
+output record; adapted from fritz_exporter PR #719), `tracker.py` (which rows are new, see
+"Duplicate handling"), `state.py` (state file per device), `extractor.py` (fetch per device
+through fritzconnection's session, times of pre-sync rows), poll loop with `--once` in
+`__main__.py`, `capture.py` (`--capture DIR`: raw snapshots plus uptime per poll, to study real
 boxes).
 
-**Missing:** state file, reboot detection, handling of pre-sync timestamps, identity by position
-instead of time (below), remote access, test fixtures built from real captures.
+**Missing:** remote access; checks against other models and firmware (only a 7690 with FRITZ!OS
+8.50 and a FRITZ!Repeater 1200 AX were captured).
 
 ### Data source
 
@@ -77,8 +78,13 @@ instead of time (below), remote access, test fixtures built from real captures.
 
 ### Quirks to handle
 
-- **Not append-only.** A repeated message is folded into one row: its time moves to the latest
-  occurrence and `msg` gains a counter suffix (German: `[N Meldungen seit DD.MM.YY HH:MM:SS]`).
+- **Not append-only.** A message that repeats while its row is the newest one is folded into
+  that row: its time moves to the latest occurrence and `msg` gains a counter suffix (German:
+  `[N Meldungen seit DD.MM.YY HH:MM:SS]`, the time of the first occurrence, which stays put).
+  With any other row in between, the repeat gets a row of its own.
+- **Mesh.** The mesh master shows the rows of its repeaters too, as `[fritz.repeater] …`,
+  folded as on the repeater. It sorts them in by their time, so a new row can land below rows
+  already seen. Polling the master and a repeater gives each repeater row twice.
 - **Bounded buffer.** Old rows drop off; a reboot empties the log.
 - **Timestamps before time sync.** Seen on a 7690 with FRITZ!OS 8.50 (captures of October
   2026): until the box syncs its clock, entries are dated `01.01.70` and their time is the time
@@ -97,21 +103,32 @@ instead of time (below), remote access, test fixtures built from real captures.
 
 ### Duplicate handling
 
-- Do **not** key on the timestamp. Identity = `(id, group, msg without counter suffix)` plus
-  position in the list; the order of the log stays reliable even when times do not.
-- Diff each snapshot against the stored previous one: rows above the newest known row are new; a
-  folded row whose counter rose counts as `new N - old N` occurrences.
-- **Reboot detection** via `DeviceInfo:GetInfo` → `NewUpTime`: uptime going down means a restart,
-  and every current row is new.
-- **Persist state** per device in `state_dir`, so a restart of the tool does not log everything
-  again.
+Checked by replaying 17 hours of captures with two box reboots through the tracker: every
+occurrence came out once.
+
+- Identity = `(id, group, msg without counter suffix)` plus the **time of the first
+  occurrence** (the counter's "since", else the row's time). Neither position (mesh rows are
+  sorted in) nor the row's own time (moves on folding) works.
+- Match each message's rows against the stored ones, both newest first, with ±2 s tolerance
+  for the jitter. 1970 times are put on the box's clock first (box boot = box-local now -
+  uptime, once the box has synced), so rows match across the rewrite on sync.
+- A matched row whose counter rose yields **one** record with `repeat: new N - old N` and the
+  time of the latest occurrence; the box keeps no times in between. A new row yields `repeat: N`.
+- **Reboot detection:** boot = now - `NewUpTime` on our clock. It stayed within a second over two
+  weeks; a shift of more than 60 s means a new boot, and every row is new. This also works
+  across a restart of the tool, unlike "uptime went down".
+- **State** per device in `<state_dir>/<hostname>.json` (serial, boot, rows), written atomically
+  after the records are flushed to stdout. A failure before that repeats records, never loses
+  them. A state file with another serial is ignored.
 
 ### Output
 
-- One JSON object per event on stdout: device name and serial, `id`, `group`, `msg`, box
-  timestamp (raw), resolved timestamp with UTC offset (time zone from `Time1:GetInfo`), and
-  `time_estimated: true` for pre-sync rows (estimated as boot time + the row's time since boot,
-  with boot time = now - uptime; matches the box's own rewrite to within a second).
+- One JSON object per new row or fold on stdout: `event_time` with UTC offset (time zone from
+  `Time1:GetInfo`), `time_estimated`, `box_time` (raw), device name, host and serial, `group`,
+  `id`, `msg` (without counter, token redacted), `repeat`.
+- Pre-sync rows get `time_estimated: true`: box boot + the row's time since boot on the box's
+  clock once it has synced (matches the box's own rewrite to within a second), else our boot
+  estimate + offset, in UTC.
 - Own diagnostics go to stderr, so the event stream stays clean.
 
 ### Out of scope

@@ -72,6 +72,11 @@ def poll_all(extractors: list[DeviceExtractor]) -> None:
     for extractor in extractors:
         try:
             records = extractor.poll()
+            for record in records:
+                sys.stdout.write(json.dumps(record, ensure_ascii=False) + "\n")
+            sys.stdout.flush()
+            # Only now that the records are out: a failure before this loses nothing.
+            extractor.commit()
         except ExtractionError as e:
             logger.warning("%s: %s, will retry", extractor.name, e)
             continue
@@ -80,9 +85,6 @@ def poll_all(extractors: list[DeviceExtractor]) -> None:
             # The tracker commits only after a successful poll, so nothing is lost.
             logger.exception("%s: unexpected error, will retry", extractor.name)
             continue
-        for record in records:
-            sys.stdout.write(json.dumps(record, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
 
 
 def run(
@@ -92,7 +94,9 @@ def run(
     stop: threading.Event | None = None,
     capture_dir: Path | None = None,
 ) -> None:
-    extractors = [DeviceExtractor(device, capture_dir) for device in config.devices]
+    extractors = [
+        DeviceExtractor(device, Path(config.state_dir), capture_dir) for device in config.devices
+    ]
     stop = stop or threading.Event()
     while True:
         poll_all(extractors)

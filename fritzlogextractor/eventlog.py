@@ -10,7 +10,13 @@ XML (``<DeviceLog><Event><id/><group/><date/><time/><msg/></Event>...``). This
 module holds everything that does not touch the network: the strict parser,
 the tracker that picks out entries not yet emitted, the resolution of the
 box-local timestamps to a UTC offset and the output record. Fetching the XML
-is done in :mod:`fritzlogextractor.extractor`.
+is done in :mod:`fritzlogextractor.extractor`, picking out the entries not yet
+emitted in :mod:`fritzlogextractor.tracker`.
+
+The box folds a message that repeats right away into the row it already has: the
+row moves to the time of the latest occurrence and the message gains a suffix
+like ``[3 Meldungen seit 31.10.26 03:13:58]``. The parser splits the suffix off
+into :attr:`Event.count` and :attr:`Event.since`.
 
 Every field comes from the box and may contain text typed by a third party
 (for example a user name in a failed login), so fields are validated and the
@@ -20,9 +26,7 @@ DynDNS token is redacted from the message. JSON encoding takes care of escaping.
 from __future__ import annotations
 
 import calendar
-import logging
 import re
-from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from xml.etree.ElementTree import Element
@@ -32,16 +36,14 @@ from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
 __all__ = [
+    "PRE_SYNC_EPOCH",
     "Event",
     "EventLogParseError",
-    "EventLogTracker",
     "ParsedEventLog",
     "event_record",
     "parse_event_log",
     "resolve_utc_offset",
 ]
-
-logger = logging.getLogger("fritzlogextractor.eventlog")
 
 _GROUP_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
 _ID_RE = re.compile(r"[0-9]{1,9}")
@@ -49,7 +51,15 @@ _DATE_RE = re.compile(r"[0-9]{2}\.[0-9]{2}\.[0-9]{2}")
 _TIME_RE = re.compile(r"[0-9]{2}:[0-9]{2}:[0-9]{2}")
 # The DynDNS update URL in a message carries the account token as ``q=<token>``.
 _TOKEN_RE = re.compile(r"(?<!\w)q=[^&\s]+")
-_MAX_REJECT_REPR = 80
+# Counter of a folded row; the words between count and date depend on the box's language.
+_FOLD_RE = re.compile(
+    r"\s*\[([0-9]{1,9}) [^\[\]]*?([0-9]{2}\.[0-9]{2}\.[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})\]\s*$"
+)
+_BOX_TIME_FORMAT = "%d.%m.%y %H:%M:%S"
+
+# Until a box has synced its clock after a reboot, it dates its entries on this day,
+# with the time since boot as time of day.
+PRE_SYNC_EPOCH = datetime(1970, 1, 1)  # noqa: DTZ001
 
 
 class EventLogParseError(Exception):
@@ -58,12 +68,29 @@ class EventLogParseError(Exception):
 
 @define(frozen=True)
 class Event:
-    """One validated event log entry; ``timestamp`` is the box-local wall-clock time."""
+    """One validated event log row.
+
+    ``timestamp`` is the box-local wall-clock time of the latest occurrence, ``msg``
+    the message without the counter of a folded row, ``count`` the number of
+    occurrences in the row and ``since`` the time of the first one if it is folded.
+    """
 
     id: int
     group: str
     timestamp: datetime
     msg: str
+    count: int = 1
+    since: datetime | None = None
+
+    @property
+    def first(self) -> datetime:
+        """Time of the first occurrence; it stays put when the row folds."""
+        return self.since or self.timestamp
+
+    @property
+    def pre_sync(self) -> bool:
+        """The box logged the row before it had synced its clock."""
+        return self.timestamp.year == PRE_SYNC_EPOCH.year
 
 
 @define(frozen=True)
@@ -94,8 +121,13 @@ def _parse_event(node: Element) -> Event:
     if not (_DATE_RE.fullmatch(date) and _TIME_RE.fullmatch(time)):
         msg = "invalid date or time"
         raise ValueError(msg)
-    timestamp = datetime.strptime(f"{date} {time}", "%d.%m.%y %H:%M:%S")  # noqa: DTZ007
-    return Event(int(event_id), group, timestamp, fields["msg"] or "")
+    timestamp = datetime.strptime(f"{date} {time}", _BOX_TIME_FORMAT)  # noqa: DTZ007
+    msg = fields["msg"] or ""
+    fold = _FOLD_RE.search(msg)
+    if fold is None:
+        return Event(int(event_id), group, timestamp, msg)
+    since = datetime.strptime(fold[2], _BOX_TIME_FORMAT)  # noqa: DTZ007
+    return Event(int(event_id), group, timestamp, msg[: fold.start()], int(fold[1]), since)
 
 
 def parse_event_log(xml: str | bytes) -> ParsedEventLog:
@@ -124,67 +156,39 @@ def parse_event_log(xml: str | bytes) -> ParsedEventLog:
     return ParsedEventLog(events, rejected)
 
 
-class EventLogTracker:
-    """Remembers which entries were emitted and returns only the new ones.
-
-    The box returns its whole buffer on every call. Entries are identified by
-    (time, message) and counted, so identical entries in the same second are
-    each emitted; a folded row, whose time moved and whose message gained a
-    counter, is a new entry. :meth:`commit` replaces the counts with the current
-    buffer's, so they never outgrow what the box holds, and is called only after
-    the entries were emitted: a failure in between loses nothing. After a restart
-    of the exporter the buffer is emitted once more: a duplicate, never a loss.
-    """
-
-    def __init__(self) -> None:
-        self._emitted: Counter[tuple[datetime, str]] = Counter()
-        self._rejected_seen: set[str] = set()
-
-    def new_events(self, parsed: ParsedEventLog) -> list[Event]:
-        """Return the entries not emitted before, oldest first; does not change state."""
-        in_buffer = Counter((e.timestamp, e.msg) for e in parsed.events)
-        budget = {key: count - self._emitted[key] for key, count in in_buffer.items()}
-        new: list[Event] = []
-        # The box lists newest first; walk it backwards to keep equal times in order.
-        for event in reversed(parsed.events):
-            key = (event.timestamp, event.msg)
-            if budget[key] > 0:
-                new.append(event)
-                budget[key] -= 1
-        return sorted(new, key=lambda e: e.timestamp)
-
-    def commit(self, parsed: ParsedEventLog) -> None:
-        """Record the buffer as emitted and warn about newly seen rejected entries."""
-        self._emitted = Counter((e.timestamp, e.msg) for e in parsed.events)
-
-        rejected = set(parsed.rejected)
-        if rejected - self._rejected_seen:
-            logger.warning(
-                "skipping %d event log entries that failed validation (first: %s)",
-                len(rejected),
-                min(rejected)[:_MAX_REJECT_REPR],
-            )
-        self._rejected_seen = rejected
+def with_offset(local: datetime, utc_offset: timedelta | None) -> datetime:
+    """Attach the UTC offset to a box-local time; left naive when the offset is unknown."""
+    return local if utc_offset is None else local.replace(tzinfo=timezone(utc_offset))
 
 
-def event_record(
-    event: Event, utc_offset: timedelta | None, device: str, host: str
+def event_record(  # noqa: PLR0913
+    event: Event,
+    event_time: datetime,
+    *,
+    repeat: int,
+    estimated: bool,
+    device: str,
+    host: str,
+    serial: str | None,
 ) -> dict[str, Any]:
-    """Build the output record for one entry.
+    """Build the output record for ``repeat`` new occurrences of one row.
 
-    ``event_time`` is ISO 8601 with the UTC offset in force at that time, or
-    without an offset when the box's time zone is unknown.
+    ``event_time`` is the time of the latest occurrence, ideally with its UTC
+    offset; ``estimated`` says it was derived from the uptime because the box
+    logged the row before syncing its clock. ``box_time`` is the time as the box
+    showed it.
     """
-    stamp = event.timestamp
-    if utc_offset is not None:
-        stamp = stamp.replace(tzinfo=timezone(utc_offset))
     return {
-        "event_time": stamp.isoformat(),
+        "event_time": event_time.isoformat(),
+        "time_estimated": estimated,
+        "box_time": event.timestamp.strftime(_BOX_TIME_FORMAT),
         "device": device,
         "host": host,
+        "serial": serial,
         "group": event.group,
         "id": event.id,
         "msg": _TOKEN_RE.sub("q=<redacted>", event.msg),
+        "repeat": repeat,
     }
 
 
