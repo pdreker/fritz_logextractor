@@ -1,11 +1,14 @@
 import json
 import logging
+import os
+import signal
+import threading
 from datetime import datetime, timedelta
 
 import pytest
 
 from fritzlogextractor import __version__
-from fritzlogextractor.__main__ import main
+from fritzlogextractor.__main__ import main, stop_on_signals
 from fritzlogextractor.logs import setup_logging
 
 
@@ -41,8 +44,8 @@ def test_own_log_lines_are_json_by_default(monkeypatch, capsys):
     assert record["kind"] == "log"
     assert record["level"] == "ERROR"
     assert record["logger"] == "fritzlogextractor"
-    assert record["msg"] == "Error while reading config:"
-    assert "Traceback" in record["exc"]
+    assert record["msg"].startswith("Invalid configuration: ")
+    assert "exc" not in record
     assert datetime.fromisoformat(record["time"]).utcoffset() == timedelta(0)
 
 
@@ -53,8 +56,8 @@ def test_text_log_format_for_terminals(monkeypatch, capsys):
         main(["--log-format", "text"])
 
     err = capsys.readouterr().err
-    assert "ERROR fritzlogextractor | Error while reading config:" in err
-    assert "Traceback" in err
+    assert "ERROR fritzlogextractor | Invalid configuration: " in err
+    assert "Traceback" not in err
     assert not err.lstrip().startswith("{")
 
 
@@ -64,3 +67,12 @@ def test_json_log_line_stays_on_one_line_with_odd_text(capsys):
 
     [line] = capsys.readouterr().err.splitlines()
     assert json.loads(line)["msg"] == "two\nlines \x1b[2J and an arg"
+
+
+def test_sigterm_ends_the_run_after_the_current_poll():
+    stop = threading.Event()
+    stop_on_signals(stop)
+
+    os.kill(os.getpid(), signal.SIGTERM)
+
+    assert stop.wait(1)

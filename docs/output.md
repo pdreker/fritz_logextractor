@@ -23,8 +23,10 @@ tool's own messages go to stderr, also as JSON lines but marked `"kind": "log"`,
 | `repeat` | How many occurrences this line stands for, see [Repeats](#repeats) |
 
 Every field comes from the box and may hold text typed by someone else, for example a user name
-in a failed login. JSON encoding escapes it, so it cannot break a line. DynDNS update tokens
-(`q=...`) are replaced by `q=<redacted>`.
+in a failed login. JSON encoding escapes it, so it cannot break a line. URLs keep only scheme
+and host (`https://ddns.example.com/<redacted>`): a DynDNS update URL can carry user name,
+password or token anywhere after the host. A DynDNS token outside a URL (`q=...`) becomes
+`q=<redacted>`.
 
 ## Repeats
 

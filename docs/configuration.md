@@ -29,7 +29,7 @@ devices:
     hostname: 192.168.123.1
     username: logreader
     password: "..."
-    connection_timeout: 0      # no timeout
+    connection_timeout: 5      # seconds
 ```
 
 Only `username` and one of `password` or `password_file` are required per device; every other
@@ -58,7 +58,7 @@ fritzlogextractor
 | `devices[].username` | `FRITZ_USERNAME` | *(required)* |
 | `devices[].password` | `FRITZ_PASSWORD` | *(required unless password_file is set)* |
 | `devices[].password_file` | `FRITZ_PASSWORD_FILE` | |
-| `devices[].connection_timeout` | `FRITZ_CONNECTION_TIMEOUT` | `10` (`0` disables it) |
+| `devices[].connection_timeout` | `FRITZ_CONNECTION_TIMEOUT` | `10` (seconds, at least 1) |
 | `devices[].use_tls` | `FRITZ_USE_TLS` | `false` |
 
 `state_dir` holds one file per device, `<hostname>.json`. It must survive restarts and be

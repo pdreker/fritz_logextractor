@@ -42,6 +42,7 @@ __all__ = [
     "ParsedEventLog",
     "event_record",
     "parse_event_log",
+    "redact",
     "resolve_utc_offset",
 ]
 
@@ -49,8 +50,15 @@ _GROUP_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
 _ID_RE = re.compile(r"[0-9]{1,9}")
 _DATE_RE = re.compile(r"[0-9]{2}\.[0-9]{2}\.[0-9]{2}")
 _TIME_RE = re.compile(r"[0-9]{2}:[0-9]{2}:[0-9]{2}")
-# The DynDNS update URL in a message carries the account token as ``q=<token>``.
+# A DynDNS update URL in a message may carry credentials anywhere after the
+# scheme, depending on the provider: ``user:pass@``, the path or the query. Only
+# scheme and host stay.
+_URL_RE = re.compile(
+    r"\b(?P<origin>[A-Za-z][A-Za-z0-9+.-]*://)(?:[^/?#@\s]*@)?(?P<host>[^/?#@\s]*)(?P<rest>\S*)"
+)
+# One provider's token, also seen outside a URL.
 _TOKEN_RE = re.compile(r"(?<!\w)q=[^&\s]+")
+_REDACTED = "<redacted>"
 # Counter of a folded row; the words between count and date depend on the box's language.
 _FOLD_RE = re.compile(
     r"\s*\[([0-9]{1,9}) [^\[\]]*?([0-9]{2}\.[0-9]{2}\.[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})\]\s*$"
@@ -161,6 +169,16 @@ def with_offset(local: datetime, utc_offset: timedelta | None) -> datetime:
     return local if utc_offset is None else local.replace(tzinfo=timezone(utc_offset))
 
 
+def _redact_url(url: re.Match[str]) -> str:
+    rest = f"/{_REDACTED}" if url["rest"] else ""
+    return f"{url['origin']}{url['host']}{rest}"
+
+
+def redact(msg: str) -> str:
+    """``msg`` with credentials in URLs and DynDNS tokens replaced."""
+    return _TOKEN_RE.sub(f"q={_REDACTED}", _URL_RE.sub(_redact_url, msg))
+
+
 def event_record(  # noqa: PLR0913
     event: Event,
     event_time: datetime,
@@ -188,7 +206,7 @@ def event_record(  # noqa: PLR0913
         "serial": serial,
         "group": event.group,
         "id": event.id,
-        "msg": _TOKEN_RE.sub("q=<redacted>", event.msg),
+        "msg": redact(event.msg),
         "repeat": repeat,
     }
 

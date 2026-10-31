@@ -35,6 +35,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger("fritzlogextractor.extractor")
 
 _MAX_REJECT_REPR = 80
+# A full log is about 125 kB on a 7690.
+_MAX_LOG_BYTES = 8 * 1024 * 1024
 
 
 class ExtractionError(Exception):
@@ -84,13 +86,24 @@ class DeviceExtractor:
         # Same request as fritzconnection's FritzStatus.get_avm_device_log(), but
         # the raw body is kept, so the strict parser in eventlog.py can check it.
         path = fc.call_action("DeviceInfo1", "X_AVM-DE_GetDeviceLogPath")["NewDeviceLogPath"]
-        response = fc.session.get(
-            f"{fc.address}:{fc.port}{path}", timeout=self.config.connection_timeout
-        )
-        if not response.ok:
-            msg = f"HTTP {response.status_code}"
+        # Appended to our address: anything but a plain path could send the request,
+        # with the session, to another host.
+        if not isinstance(path, str) or not path.startswith("/") or path.startswith("//"):
+            msg = "unexpected event log path"
             raise ExtractionError(msg)
-        return response.content
+        with fc.session.get(
+            f"{fc.address}:{fc.port}{path}", timeout=self.config.connection_timeout, stream=True
+        ) as response:
+            if not response.ok:
+                msg = f"HTTP {response.status_code}"
+                raise ExtractionError(msg)
+            body = bytearray()
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                body += chunk
+                if len(body) > _MAX_LOG_BYTES:
+                    msg = f"event log larger than {_MAX_LOG_BYTES} bytes"
+                    raise ExtractionError(msg)
+        return bytes(body)
 
     def _time_info(
         self, fc: FritzConnection

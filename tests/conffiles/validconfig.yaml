@@ -11,4 +11,4 @@ devices:
     hostname: repeater.local
     username: logreader
     password: secret
-    connection_timeout: 0
+    connection_timeout: 5

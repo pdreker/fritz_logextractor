@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
+import signal
 import sys
 import threading
 from pathlib import Path
@@ -55,8 +57,9 @@ def main(argv: list[str] | None = None) -> None:
 
     try:
         config = get_config(args.config)
-    except ConfigError, ValueError, TypeError:
-        logger.exception("Error while reading config:")
+    except (ConfigError, ValueError, TypeError) as e:
+        # No traceback: the message names the problem.
+        logger.error("Invalid configuration: %s", e)  # noqa: TRY400
         sys.exit(1)
 
     logging.getLogger().setLevel(args.log_level or config.log_level)
@@ -65,7 +68,47 @@ def main(argv: list[str] | None = None) -> None:
     )
     if args.capture:
         logger.warning("Storing unredacted event log snapshots below %s", args.capture)
-    run(config, once=args.once, capture_dir=args.capture)
+    stop = threading.Event()
+    stop_on_signals(stop)
+    try:
+        run(config, once=args.once, stop=stop, capture_dir=args.capture)
+    except OutputError as e:
+        logger.error("Cannot write the events to stdout (%s), stopping", e.__cause__)  # noqa: TRY400
+        _discard_stdout()
+        sys.exit(1)
+
+
+def _discard_stdout() -> None:
+    """Keep Python from failing again on the final flush of a broken stdout at exit."""
+    os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+
+
+def stop_on_signals(stop: threading.Event) -> None:
+    """Let SIGTERM and SIGINT end the run after the current poll.
+
+    As PID 1 in a container, Python would ignore SIGTERM without a handler, and the
+    container runtime would kill it after its timeout.
+    """
+
+    def handler(signum: int, _frame: object) -> None:
+        logger.info("Got %s, stopping", signal.Signals(signum).name)
+        stop.set()
+
+    signal.signal(signal.SIGTERM, handler)
+    signal.signal(signal.SIGINT, handler)
+
+
+class OutputError(Exception):
+    """Stdout cannot take the events; with nowhere to put them, there is no point going on."""
+
+
+def write_records(records: list[dict]) -> None:
+    try:
+        for record in records:
+            sys.stdout.write(json.dumps(record, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+    except OSError as e:
+        raise OutputError from e
 
 
 def poll_all(extractors: list[DeviceExtractor]) -> None:
@@ -73,11 +116,6 @@ def poll_all(extractors: list[DeviceExtractor]) -> None:
     for extractor in extractors:
         try:
             records = extractor.poll()
-            for record in records:
-                sys.stdout.write(json.dumps(record, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
-            # Only now that the records are out: a failure before this loses nothing.
-            extractor.commit()
         except ExtractionError as e:
             logger.warning("%s: %s, will retry", extractor.name, e)
             continue
@@ -86,6 +124,9 @@ def poll_all(extractors: list[DeviceExtractor]) -> None:
             # The tracker commits only after a successful poll, so nothing is lost.
             logger.exception("%s: unexpected error, will retry", extractor.name)
             continue
+        write_records(records)
+        # Only now that the records are out: a failure before this loses nothing.
+        extractor.commit()
 
 
 def run(
