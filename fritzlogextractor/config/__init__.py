@@ -1,4 +1,4 @@
-from .config import DeviceConfig, ExtractorConfig, get_config
+from .config import LOG_LEVELS, DeviceConfig, ExtractorConfig, get_config
 from .exceptions import (
     ConfigError,
     ConfigFileUnreadableError,
@@ -12,6 +12,7 @@ from .exceptions import (
 )
 
 __all__ = [
+    "LOG_LEVELS",
     "ConfigError",
     "ConfigFileUnreadableError",
     "ConfigNotAMappingError",

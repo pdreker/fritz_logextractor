@@ -18,7 +18,7 @@ import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from fritzlogextractor.state import safe_file_name, write_private
+from fritzlogextractor.files import safe_file_name, write_private
 
 if TYPE_CHECKING:
     from pathlib import Path

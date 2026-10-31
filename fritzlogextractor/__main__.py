@@ -9,11 +9,10 @@ import sys
 import threading
 from pathlib import Path
 
-from fritzlogextractor.config import ConfigError, ExtractorConfig, get_config
+from fritzlogextractor import __version__
+from fritzlogextractor.config import LOG_LEVELS, ConfigError, ExtractorConfig, get_config
 from fritzlogextractor.extractor import DeviceExtractor, ExtractionError
 from fritzlogextractor.logs import LOG_FORMATS, setup_logging
-
-from . import __version__
 
 logger = logging.getLogger("fritzlogextractor")
 
@@ -27,7 +26,7 @@ def parse_cmdline(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        choices=LOG_LEVELS,
         help="Override the log level from the configuration",
     )
     parser.add_argument(
