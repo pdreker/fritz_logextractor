@@ -10,11 +10,13 @@ from attrs import define
 from fritzconnection import FritzConnection  # type: ignore[import]
 from fritzconnection.core.exceptions import (  # type: ignore[import]
     FritzActionError,
+    FritzAuthorizationError,
     FritzConnectionException,
     FritzServiceError,
 )
 from requests.exceptions import RequestException
 
+from fritzlogextractor import metrics
 from fritzlogextractor.capture import SnapshotCapture
 from fritzlogextractor.clock import BoxClock, is_pre_sync
 from fritzlogextractor.config import ConfigError
@@ -43,8 +45,24 @@ _CHUNK_BYTES = 64 * 1024
 _CONNECTION_ERRORS = (FritzConnectionException, RequestException)
 
 
+def _read_error_reason(error: Exception) -> str:
+    if isinstance(error, FritzAuthorizationError):
+        return "auth"
+    if isinstance(error, _CONNECTION_ERRORS):
+        return "connection"
+    # A required field missing or malformed in the box's answer.
+    return "response"
+
+
 class ExtractionError(Exception):
-    """The log of a device could not be read this round; the text is safe to log."""
+    """The log of a device could not be read this round; the text is safe to log.
+
+    ``reason`` is one of :data:`metrics.POLL_ERROR_REASONS`.
+    """
+
+    def __init__(self, msg: str, reason: str = "response") -> None:
+        super().__init__(msg)
+        self.reason = reason
 
 
 @define(frozen=True)
@@ -53,6 +71,7 @@ class _Snapshot:
 
     parsed: ParsedEventLog
     clock: BoxClock
+    now: datetime
 
 
 class DeviceExtractor:
@@ -76,6 +95,7 @@ class DeviceExtractor:
         self._state_failing = False
         self._pending: _Snapshot | None = None
         self._rejected_seen: set[str] = set()
+        metrics.init_device(self.name)
 
     def poll(self) -> list[dict[str, Any]]:
         """Return the records of all occurrences not emitted before, oldest first."""
@@ -91,16 +111,19 @@ class DeviceExtractor:
 
         source = Source(self.name, self.config.hostname, self._serial)
         new = self._tracker.new_entries(parsed.events, clock.boot, clock.box_boot)
-        self._pending = _Snapshot(parsed, clock)
+        self._pending = _Snapshot(parsed, clock, now)
         return [event_record(e.event, clock.event_time(e.event), e.repeat, source) for e in new]
 
     def commit(self) -> None:
         """Record the snapshot of the last :meth:`poll` as emitted."""
         if self._pending is None:
             return
-        parsed, clock = self._pending.parsed, self._pending.clock
+        parsed, clock, now = self._pending.parsed, self._pending.clock, self._pending.now
         self._pending = None
-        self._tracker.commit(parsed.events, clock.boot, clock.box_boot)
+        self._count_reboot(clock.boot)
+        self._tracker.commit(parsed.events, clock.boot, clock.box_boot, now)
+        metrics.LOG_ROWS.labels(self.name).set(len(parsed.events))
+        metrics.REJECTED_ROWS.labels(self.name).set(len(parsed.rejected))
         self._warn_rejected(parsed)
         self._save_state()
 
@@ -120,7 +143,7 @@ class DeviceExtractor:
             self._fc = None
             msg = f"could not read the event log ({type(e).__name__})"
             self._store_failure(msg)
-            raise ExtractionError(msg) from None
+            raise ExtractionError(msg, _read_error_reason(e)) from None
         return body, info, uptime
 
     def _connection(self) -> FritzConnection:
@@ -129,7 +152,7 @@ class DeviceExtractor:
                 password = self.config.read_password()
             except (OSError, ConfigError) as e:
                 msg = f"could not read the password ({e})"
-                raise ExtractionError(msg) from None
+                raise ExtractionError(msg, "password") from None
             self._fc = FritzConnection(
                 address=self.config.hostname,
                 user=self.config.username,
@@ -167,7 +190,7 @@ class DeviceExtractor:
             return parse_event_log(body)
         except EventLogParseError as e:
             msg = f"could not parse the event log ({e})"
-            raise ExtractionError(msg) from None
+            raise ExtractionError(msg, "parse") from None
 
     def _clock(self, now: datetime, uptime: int) -> BoxClock:
         """Boot time on both clocks, time zone rule and current offset from ``Time1:GetInfo``."""
@@ -197,6 +220,15 @@ class DeviceExtractor:
 
     # --- State, capture, warnings ----------------------------------------------------------
 
+    def _count_reboot(self, boot: datetime) -> None:
+        """At commit, so a reboot seen by a poll whose records were not written counts once."""
+        if self._tracker.boot is None or self._tracker.is_same_boot(boot):
+            return
+        metrics.BOX_REBOOTS.labels(self.name).inc()
+        if self._tracker.polled is not None:
+            unwatched = max((boot - self._tracker.polled).total_seconds(), 0.0)
+            metrics.REBOOT_UNWATCHED.labels(self.name).set(unwatched)
+
     def _load_state(self) -> None:
         # Once per run: later polls go on from the tracker in memory.
         if self._state_loaded or self._state is None:
@@ -216,6 +248,7 @@ class DeviceExtractor:
             if not self._state_failing:
                 logger.warning("%s: could not write the state file (%s)", self.name, e)
             self._state_failing = True
+            metrics.STATE_WRITE_ERRORS.labels(self.name).inc()
         else:
             self._state_failing = False
 

@@ -84,6 +84,7 @@ are git-ignored). Check changes to the tracker by replaying local captures throu
 | `state.py` | State file per device |
 | `files.py` | Safe file names from config values, private atomic writes |
 | `capture.py` | `--capture DIR`: raw snapshots plus uptime per poll, to study real boxes |
+| `metrics.py` | Prometheus metrics about the tool's own work, served only with `metrics_port` |
 
 One poll of one device:
 
@@ -173,6 +174,17 @@ occurrence came out once.
   streams mixed (container logs, journald) sorts them apart on `kind`. `--log-format text`
   gives the classic format for terminals.
 
+### Metrics
+
+Optional (`metrics_port`, off by default), for what a log stack cannot see: missing lines do
+not tell a quiet box from a stuck tool. Series per `device` (config name): last success, polls,
+errors by `reason` (`ExtractionError.reason`), event lines written, log rows, rejected rows,
+reboots, state write errors, and `reboot_unwatched_seconds`: boot - the last committed poll,
+from `polled` in the state file (optional key, so state version 1 stays). Reboots count at
+commit, so a poll whose records were not written does not count one twice. prometheus_client's
+default process and Python series stay on; `_created` series are off. Counted in `poll_all()`
+(polls, errors, events, last success) and `DeviceExtractor.commit()` (the rest).
+
 ### Container
 
 The image runs as UID/GID 65534, declares `/var/lib/fritzlogextractor` (the default
@@ -204,6 +216,7 @@ the output format, check them:
 - **Remote access** (TR-064 over the internet): users reach the box over their own VPN.
 - No native outputs for log stacks (Loki, Elasticsearch, …). Stdout is the interface; collectors
   pick it up from the container or journal. journald and syslog may come later, low priority.
-- No metrics: event counters belong in fritz_exporter, if anywhere.
+- No metrics about the box's events (counts per group or id): a log stack derives those from
+  the lines.
 - No TLS certificate verification yet (Fritz!Box certs are self-signed); see
   fritz_exporter issue #736.
