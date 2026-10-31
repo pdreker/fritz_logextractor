@@ -191,6 +191,17 @@ The image runs as UID/GID 65534, declares `/var/lib/fritzlogextractor` (the defa
 `state_dir`) as a volume and owns it. Without a mounted volume, a new container starts without
 state and prints the whole log again; the docs warn about it.
 
+### Grafana dashboard
+
+`examples/grafana/build_dashboard.py` writes `fritz-logextractor.json` (as in fritz_exporter:
+edit the script, not the JSON); `tests/test_grafana_dashboard.py` checks the JSON is current,
+uses every metric of `metrics.py` and has no overlapping panels. Data sources and the Loki
+stream matcher are variables (`$stream`, default `job="fritzlogextractor"`, the label every
+Alloy source sets). Event fields other than the labels come from `| json` at query time; keep
+`device`/`group`/`kind` out of it, they are labels already. Categorical colors are fixed per
+group and per error reason, steps that hold on Grafana's dark and light theme. Check queries
+against a real Loki and Prometheus after changing them.
+
 ### Log collector examples
 
 `examples/` holds configs for Grafana Alloy (→ Loki; one `pipeline.alloy` plus a source file

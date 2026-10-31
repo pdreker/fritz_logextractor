@@ -13,6 +13,7 @@ nav:
   - Output: output.md
   - Log collectors: collectors.md
   - Metrics: metrics.md
+  - Grafana dashboard: dashboard.md
   - Capturing snapshots: capture.md
   - Development: development.md
 

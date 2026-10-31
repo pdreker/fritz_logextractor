@@ -13,6 +13,8 @@ purpose; adapt them to your setup. All of them follow the same plan:
   (own log); Elasticsearch gets one index for events and one for the tool's log. Everything
   else stays in the JSON.
 
+The [Grafana dashboard](dashboard.md) expects the Loki labels of the Alloy example.
+
 The files are in [`examples/`](https://github.com/pdreker/fritz_logextractor/tree/main/examples)
 in the repository.
 
