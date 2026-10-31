@@ -13,8 +13,8 @@ tool. Companion to fritz_exporter (metrics).
 - **Entrypoint**: `fritzlogextractor/__main__.py` → `main()`
 - **Python version**: 3.14+
 - **User docs**: `docs/`, published at <https://pdreker.github.io/fritz_logextractor/>
-- **Status**: works against a FRITZ!Box 7690; not released yet. The maintainer releases once it
-  is an MVP that "just works" without attention (see "Open" below).
+- **Status**: 0.2.0 is the first real release (MVP), in use against a FRITZ!Box 7690 with
+  metrics and the Grafana dashboard. The maintainer decides when to release; see "Open" below.
 
 ---
 
