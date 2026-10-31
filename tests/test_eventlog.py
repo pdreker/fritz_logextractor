@@ -158,6 +158,7 @@ class TestRecord:
         )
 
         assert rec == {
+            "kind": "event",
             "event_time": "2026-10-09T22:11:35+02:00",
             "time_estimated": False,
             "box_time": "09.10.26 22:11:35",

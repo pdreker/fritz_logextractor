@@ -176,9 +176,10 @@ def event_record(  # noqa: PLR0913
     ``event_time`` is the time of the latest occurrence, ideally with its UTC
     offset; ``estimated`` says it was derived from the uptime because the box
     logged the row before syncing its clock. ``box_time`` is the time as the box
-    showed it.
+    showed it. ``kind`` tells events apart from the tool's own log lines.
     """
     return {
+        "kind": "event",
         "event_time": event_time.isoformat(),
         "time_estimated": estimated,
         "box_time": event.timestamp.strftime(_BOX_TIME_FORMAT),

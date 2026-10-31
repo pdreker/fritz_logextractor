@@ -1,16 +1,3 @@
-# Copyright 2026 Patrick Dreker <patrick@dreker.de>
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#   http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """State file per device, so a restart of the tool does not emit the log again.
 
 The file holds the device's serial number and the tracker's rows. Rows carry
@@ -77,3 +64,18 @@ class StateFile:
         partial.touch(mode=0o600)
         partial.write_text(json.dumps({"serial": serial, "tracker": tracker.to_json()}))
         partial.replace(self.path)
+
+
+# Copyright 2026 Patrick Dreker <patrick@dreker.de>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.

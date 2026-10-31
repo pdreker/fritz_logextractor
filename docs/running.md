@@ -192,6 +192,7 @@ memory only and prints the whole log again on every start.
 | `--config FILE` | Read the configuration from `FILE` instead of the environment |
 | `--once` | Read each device once, print what is new and exit |
 | `--log-level LEVEL` | Override the log level from the configuration |
+| `--log-format FORMAT` | Format of the tool's own log lines on stderr: `json` (default) or `text` for reading in a terminal |
 | `--capture DIR` | Also store the raw log of each poll, see [Capturing snapshots](capture.md) |
 | `--version` | Print the version and exit |
 
@@ -200,15 +201,14 @@ run.
 
 ## Keeping events and diagnostics apart
 
-In a terminal, stdout and stderr show up together. Send them to different places to keep the
-events clean:
+Events go to stdout, the tool's own log lines to stderr. Both are JSON lines with a `kind` field,
+`event` or `log`, so they can be told apart even where the two streams end up mixed, as in a
+container's log or a terminal. A log stack keeps the lines with `"kind": "event"` as the box's
+log and the rest as the tool's own; see [Output](output.md#own-log-lines).
+
+In a terminal, the classic format is easier to read, and redirecting keeps the events apart:
 
 ```bash
-fritzlogextractor --config config.yaml > events.jsonl      # events to a file, diagnostics on screen
-fritzlogextractor --config config.yaml 2> extractor.log    # diagnostics to a file
+fritzlogextractor --config config.yaml --log-format text > events.jsonl   # events to a file
+fritzlogextractor --config config.yaml --log-format text 2> tool.log      # own log to a file
 ```
-
-Container runtimes keep the two apart as well: Docker's `json-file` log driver and the CRI log
-format of Kubernetes record for each line whether it came from stdout or stderr, and log
-collectors such as Grafana Alloy, Promtail, Fluent Bit or Vector can filter on that. Collect
-stdout as events and treat stderr as the tool's own log.
