@@ -16,7 +16,8 @@ the device's metrics to Prometheus.
 
 !!! warning "Early days"
 
-    - **Entries are lost** if the box logs them and then reboots before the next poll.
+    - **Entries are lost** if the box logs them and then reboots before the next poll. The
+      [metrics](metrics.md) tell how long such a gap was.
     - Checked against few devices: a FRITZ!Box 7690 (FRITZ!OS 8.50) with a FRITZ!Repeater
       1200 AX over a day with reboots, and a FRITZ!Box 6660 Cable (FRITZ!OS 8.25) once. Other
       models and firmware may change their log in ways not handled yet.
@@ -38,3 +39,4 @@ podman run --rm \
 - [Running](running.md): locally, in a container, with Compose or on Kubernetes.
 - [Configuration](configuration.md): config file or environment, all options.
 - [Output](output.md): what each field means, repeats, mesh, own logins.
+- [Metrics](metrics.md): optional Prometheus endpoint about the tool's own work.

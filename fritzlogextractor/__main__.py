@@ -9,7 +9,7 @@ import sys
 import threading
 from pathlib import Path
 
-from fritzlogextractor import __version__
+from fritzlogextractor import __version__, metrics
 from fritzlogextractor.config import LOG_LEVELS, ConfigError, ExtractorConfig, get_config
 from fritzlogextractor.extractor import DeviceExtractor, ExtractionError
 from fritzlogextractor.logs import LOG_FORMATS, setup_logging
@@ -67,6 +67,17 @@ def main(argv: list[str] | None = None) -> None:
     )
     if args.capture:
         logger.warning("Storing unredacted event log snapshots below %s", args.capture)
+    if config.metrics_port is not None and not args.once:
+        try:
+            metrics.serve(config.metrics_port, config.metrics_address)
+        except OSError as e:
+            logger.error(  # noqa: TRY400
+                "Cannot serve metrics on %s:%d (%s)",
+                config.metrics_address,
+                config.metrics_port,
+                e.strerror or e,
+            )
+            sys.exit(1)
     stop = threading.Event()
     stop_on_signals(stop)
     try:
@@ -113,19 +124,25 @@ def write_records(records: list[dict]) -> None:
 def poll_all(extractors: list[DeviceExtractor]) -> None:
     """Poll every device once and print new entries as JSON lines on stdout."""
     for extractor in extractors:
+        name = extractor.name
+        metrics.POLLS.labels(name).inc()
         try:
             records = extractor.poll()
         except ExtractionError as e:
-            logger.warning("%s: %s, will retry", extractor.name, e)
+            logger.warning("%s: %s, will retry", name, e)
+            metrics.POLL_ERRORS.labels(name, e.reason).inc()
             continue
         except Exception:
             # An answer nobody expected must not stop the other devices or later polls.
             # The tracker commits only after a successful poll, so nothing is lost.
-            logger.exception("%s: unexpected error, will retry", extractor.name)
+            logger.exception("%s: unexpected error, will retry", name)
+            metrics.POLL_ERRORS.labels(name, "unexpected").inc()
             continue
         write_records(records)
+        metrics.EVENTS.labels(name).inc(len(records))
         # Only now that the records are out: a failure before this loses nothing.
         extractor.commit()
+        metrics.LAST_SUCCESS.labels(name).set_to_current_time()
 
 
 def run(

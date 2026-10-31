@@ -32,6 +32,8 @@ DEFAULT_HOSTNAME: str = "fritz.box"
 DEFAULT_CONNECTION_TIMEOUT: int = 10
 DEFAULT_POLL_INTERVAL: int = 60
 DEFAULT_STATE_DIR: str = "/var/lib/fritzlogextractor"
+# All addresses: in a container, the port must be reachable from outside.
+DEFAULT_METRICS_ADDRESS: str = "0.0.0.0"  # noqa: S104
 
 
 def _read_config_file(config_file_path: str) -> dict[str, Any]:
@@ -53,6 +55,8 @@ _ENV_KEYS = {
     "log_level": "FRITZ_LOG_LEVEL",
     "poll_interval": "FRITZ_POLL_INTERVAL",
     "state_dir": "FRITZ_STATE_DIR",
+    "metrics_port": "FRITZ_METRICS_PORT",
+    "metrics_address": "FRITZ_METRICS_ADDRESS",
 }
 _ENV_DEVICE_KEYS = {
     "hostname": "FRITZ_HOSTNAME",
@@ -98,6 +102,13 @@ def _check_password_length(password: str) -> None:
     if len(password) > FRITZ_MAX_PASSWORD_LENGTH:
         msg = f"Password is longer than {FRITZ_MAX_PASSWORD_LENGTH} characters."
         raise FritzPasswordTooLongError(msg)
+
+
+def _optional_port(value: object) -> int | None:
+    """``None`` (metrics off) for a missing or empty value, else the port number."""
+    if value is None or value == "":
+        return None
+    return int(value)  # ty: ignore[invalid-argument-type]
 
 
 @define
@@ -161,6 +172,13 @@ class ExtractorConfig:
         default=DEFAULT_POLL_INTERVAL, converter=int, validator=validators.ge(10)
     )
     state_dir: str = field(default=DEFAULT_STATE_DIR, validator=validators.min_len(1))
+    # No port, no metrics.
+    metrics_port: int | None = field(
+        default=None,
+        converter=_optional_port,
+        validator=validators.optional([validators.ge(1), validators.le(65535)]),
+    )
+    metrics_address: str = field(default=DEFAULT_METRICS_ADDRESS, validator=validators.min_len(1))
 
     @devices.validator  # ty: ignore[unresolved-attribute]
     def check_devices(self, _: attrs.Attribute, value: list[DeviceConfig]) -> None:

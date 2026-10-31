@@ -1,6 +1,8 @@
 log_level: DEBUG
 poll_interval: 30
 state_dir: /tmp/fritzlogextractor
+metrics_port: 9788
+metrics_address: 127.0.0.1
 devices:
   - name: Fritz!Box 7590
     hostname: Fritz.Box

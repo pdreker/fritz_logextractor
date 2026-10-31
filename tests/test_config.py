@@ -19,7 +19,7 @@ def _clean_env(monkeypatch):
     for var in (
         "FRITZ_HOSTNAME", "FRITZ_NAME", "FRITZ_USERNAME", "FRITZ_PASSWORD", "FRITZ_PASSWORD_FILE",
         "FRITZ_USE_TLS", "FRITZ_CONNECTION_TIMEOUT", "FRITZ_LOG_LEVEL", "FRITZ_POLL_INTERVAL",
-        "FRITZ_STATE_DIR",
+        "FRITZ_STATE_DIR", "FRITZ_METRICS_PORT", "FRITZ_METRICS_ADDRESS",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -35,6 +35,25 @@ class TestFileConfig:
         assert config.devices[0].use_tls is True
         assert config.devices[0].connection_timeout == 10
         assert config.devices[1].connection_timeout == 5
+        assert config.metrics_port == 9788
+        assert config.metrics_address == "127.0.0.1"
+
+    def test_metrics_are_off_by_default(self, tmp_path):
+        path = tmp_path / "c.yaml"
+        path.write_text("devices:\n  - username: u\n    password: p\n")
+
+        config = get_config(str(path))
+
+        assert config.metrics_port is None
+        assert config.metrics_address == "0.0.0.0"
+
+    @pytest.mark.parametrize("port", [0, 65536, -1])
+    def test_metrics_port_must_be_a_port(self, tmp_path, port):
+        path = tmp_path / "c.yaml"
+        path.write_text(f"metrics_port: {port}\ndevices:\n  - username: u\n    password: p\n")
+
+        with pytest.raises(ValueError, match="metrics_port"):
+            get_config(str(path))
 
     def test_unreadable_file(self):
         with pytest.raises(ConfigFileUnreadableError, match="cannot read .*does-not-exist.yaml"):
@@ -127,6 +146,14 @@ class TestEnvConfig:
         assert dev.hostname == "fritz.box"
         assert dev.name == "fritz.box"
         assert dev.use_tls is False
+        assert config.metrics_port is None
+
+    def test_empty_metrics_port_means_off(self, monkeypatch):
+        monkeypatch.setenv("FRITZ_USERNAME", "logreader")
+        monkeypatch.setenv("FRITZ_PASSWORD", "secret")
+        monkeypatch.setenv("FRITZ_METRICS_PORT", "")
+
+        assert get_config(None).metrics_port is None
 
     def test_full_env(self, monkeypatch):
         monkeypatch.setenv("FRITZ_USERNAME", "logreader")
@@ -138,8 +165,13 @@ class TestEnvConfig:
         monkeypatch.setenv("FRITZ_POLL_INTERVAL", "120")
         monkeypatch.setenv("FRITZ_STATE_DIR", "/data")
         monkeypatch.setenv("FRITZ_LOG_LEVEL", "WARNING")
+        monkeypatch.setenv("FRITZ_METRICS_PORT", "9788")
+        monkeypatch.setenv("FRITZ_METRICS_ADDRESS", "::")
 
         config = get_config(None)
+
+        assert config.metrics_port == 9788
+        assert config.metrics_address == "::"
 
         assert config.poll_interval == 120
         assert config.state_dir == "/data"

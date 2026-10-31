@@ -12,6 +12,7 @@ nav:
   - Configuration: configuration.md
   - Output: output.md
   - Log collectors: collectors.md
+  - Metrics: metrics.md
   - Capturing snapshots: capture.md
   - Development: development.md
 

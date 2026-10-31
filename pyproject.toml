@@ -19,6 +19,7 @@ dependencies = [
     "pyyaml",
     "attrs>=22.2,<27.0",
     "defusedxml>=0.7.1",
+    "prometheus-client>=0.26.0",
 ]
 
 [project.urls]

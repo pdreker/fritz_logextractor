@@ -18,6 +18,7 @@ under `devices` describes one device:
 log_level: INFO
 poll_interval: 60              # seconds between polls, at least 10
 state_dir: /var/lib/fritzlogextractor
+metrics_port: 9788             # serve Prometheus metrics; leave out to turn them off
 
 devices:
   - name: Fritz!Box 7690       # shown as "device" in each event; defaults to the hostname
@@ -53,6 +54,8 @@ fritzlogextractor
 | `log_level` | `FRITZ_LOG_LEVEL` | `INFO` |
 | `poll_interval` | `FRITZ_POLL_INTERVAL` | `60` (seconds, at least 10) |
 | `state_dir` | `FRITZ_STATE_DIR` | `/var/lib/fritzlogextractor` |
+| `metrics_port` | `FRITZ_METRICS_PORT` | *(none: no metrics)* |
+| `metrics_address` | `FRITZ_METRICS_ADDRESS` | `0.0.0.0` (all addresses) |
 | `devices[].hostname` | `FRITZ_HOSTNAME` | `fritz.box` |
 | `devices[].name` | `FRITZ_NAME` | the hostname |
 | `devices[].username` | `FRITZ_USERNAME` | *(required)* |
@@ -64,6 +67,9 @@ fritzlogextractor
 `state_dir` holds one file per device, `<hostname>.json`. It must survive restarts and be
 writable; see [Running](running.md). The file holds message text from the box (addresses, host
 and user names) and is created readable by its owner only.
+
+`metrics_port` turns on the [metrics](metrics.md) for Prometheus on that port (1 to 65535);
+`metrics_address` is the address to listen on.
 
 `use_tls` talks to the box over HTTPS. The tool does not check the box's certificate, since
 Fritz!Boxes come with a self-signed one.

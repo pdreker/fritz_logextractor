@@ -73,6 +73,8 @@ class EventLogTracker:
 
     def __init__(self) -> None:
         self.boot: datetime | None = None
+        # When the snapshot was taken, on our clock; tells how long a reboot went unwatched.
+        self.polled: datetime | None = None
         self._seen: list[_Seen] = []
 
     def is_same_boot(self, boot: datetime) -> bool:
@@ -101,15 +103,23 @@ class EventLogTracker:
             new.extend(_match(old.get(key, []), rows, box_boot))
         return sorted(new, key=lambda n: on_box_clock(n.event.timestamp, box_boot))
 
-    def commit(self, events: Iterable[Event], boot: datetime, box_boot: datetime | None) -> None:
-        """Record ``events`` as emitted."""
+    def commit(
+        self,
+        events: Iterable[Event],
+        boot: datetime,
+        box_boot: datetime | None,
+        polled: datetime | None = None,
+    ) -> None:
+        """Record ``events``, read at ``polled``, as emitted."""
         self.boot = boot
+        self.polled = polled
         self._seen = [_Seen(_key(e), on_box_clock(e.first, box_boot), e.count) for e in events]
 
     def to_json(self) -> dict[str, Any]:
         return {
             "version": STATE_VERSION,
             "boot": self.boot.isoformat() if self.boot else None,
+            "polled": self.polled.isoformat() if self.polled else None,
             "rows": [
                 [s.key[0], s.key[1], s.key[2], s.first.isoformat(), s.count] for s in self._seen
             ],
@@ -124,6 +134,9 @@ class EventLogTracker:
         tracker = cls()
         try:
             tracker.boot = datetime.fromisoformat(data["boot"]) if data["boot"] else None
+            # Missing in state files written before it was added.
+            polled = data.get("polled")
+            tracker.polled = datetime.fromisoformat(polled) if polled else None
             tracker._seen = [
                 _Seen((int(i), str(g), str(m)), datetime.fromisoformat(f), int(c))
                 for i, g, m, f, c in data["rows"]
