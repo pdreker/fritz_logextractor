@@ -1,0 +1,39 @@
+# Unit tests for vector.yaml, without Docker or Elasticsearch:
+#   vector test vector.yaml vector-tests.yaml
+tests:
+  - name: an event takes the box's time and goes to the event route
+    inputs:
+      - insert_at: fritz_parsed
+        type: log
+        log_fields:
+          message: '{"kind": "event", "event_time": "2026-10-09T08:31:57+02:00", "device": "fritz.box", "group": "net", "id": 22, "msg": "Internetverbindung wurde erfolgreich hergestellt.", "repeat": 1}'
+    outputs:
+      - extract_from: fritz_by_kind.event
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.timestamp, t'2026-10-09T06:31:57Z')
+              assert_eq!(.id, 22)
+              assert!(!exists(.message))
+
+  - name: an own log line takes its time and goes to the log route
+    inputs:
+      - insert_at: fritz_parsed
+        type: log
+        log_fields:
+          message: '{"time": "2026-10-31T16:30:51.485+00:00", "kind": "log", "level": "WARNING", "logger": "fritzlogextractor.extractor", "msg": "Fritz!Box: could not read the event log (ConnectTimeout), will retry"}'
+    outputs:
+      - extract_from: fritz_by_kind.log
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.timestamp, t'2026-10-31T16:30:51.485Z')
+              assert_eq!(.level, "WARNING")
+
+  - name: a line that is not JSON is dropped
+    inputs:
+      - insert_at: fritz_parsed
+        type: log
+        log_fields:
+          message: "Traceback (most recent call last):"
+    no_outputs_from: [fritz_parsed]

@@ -175,10 +175,24 @@ The image runs as UID/GID 65534, declares `/var/lib/fritzlogextractor` (the defa
 `state_dir`) as a volume and owns it. Without a mounted volume, a new container starts without
 state and prints the whole log again; the docs warn about it.
 
+### Log collector examples
+
+`examples/` holds configs for Grafana Alloy (→ Loki; one `pipeline.alloy` plus a source file
+each for Docker/Podman socket, journald, Kubernetes), Vector, Fluentd and Logstash (→
+Elasticsearch). `docs/collectors.md` includes them with `pymdownx.snippets`, so the docs show
+exactly the checked files. All sort on `kind` and take the time from the line. When changing
+the output format, check them:
+
+- Alloy: `alloy validate <dir>` for pipeline + each source; the Docker source was run end to end
+  with Podman and Loki (a container printing sample lines, Alloy with
+  `--security-opt label=disable` for the socket under SELinux).
+- Vector: `vector test vector.yaml vector-tests.yaml`.
+- Fluentd: `fluentd --dry-run` (with `fluent-plugin-elasticsearch`), parsing with sample
+  records through `fluent-cat` and a stdout match.
+- Logstash: `logstash --config.test_and_exit`, the filter with sample records from stdin.
+
 ### Open
 
-- Example configs for log collectors in the docs: Grafana Alloy → Loki (tested), Fluentd,
-  Logstash and the like (as examples), each sorting on `kind`.
 - Checks against other models and firmware.
 
 ### Out of scope

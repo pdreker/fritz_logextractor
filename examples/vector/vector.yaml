@@ -1,0 +1,45 @@
+# fritz_logextractor with Vector: sort its lines into the box's events and the
+# tool's own log, take each line's time from the line itself and send them to
+# two Elasticsearch indices.
+sources:
+  fritzlogextractor:
+    type: docker_logs
+    include_containers: [fritzlogextractor]
+
+transforms:
+  fritz_parsed:
+    type: remap
+    inputs: [fritzlogextractor]
+    source: |
+      parsed, err = parse_json(.message)
+      if err != null || !is_object(parsed) {
+        abort
+      }
+      . = object!(parsed)
+      # Events: when the box logged them; the tool's own log: when it logged.
+      # An event_time without UTC offset (box without time zone) falls back to now.
+      stamp = if .kind == "event" { .event_time } else { .time }
+      .timestamp = parse_timestamp(string(stamp) ?? "", "%+") ?? now()
+
+  fritz_by_kind:
+    type: route
+    inputs: [fritz_parsed]
+    reroute_unmatched: false
+    route:
+      event: .kind == "event"
+      log: .kind == "log"
+
+sinks:
+  fritz_events:
+    type: elasticsearch
+    inputs: [fritz_by_kind.event]
+    endpoints: ["http://elasticsearch:9200"]
+    bulk:
+      index: "fritz-events-%Y.%m.%d"
+
+  fritz_tool_log:
+    type: elasticsearch
+    inputs: [fritz_by_kind.log]
+    endpoints: ["http://elasticsearch:9200"]
+    bulk:
+      index: "fritzlogextractor-%Y.%m.%d"

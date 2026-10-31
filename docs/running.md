@@ -206,6 +206,9 @@ Events go to stdout, the tool's own log lines to stderr. Both are JSON lines wit
 container's log or a terminal. A log stack keeps the lines with `"kind": "event"` as the box's
 log and the rest as the tool's own; see [Output](output.md#own-log-lines).
 
+Ready-made configs for Grafana Alloy, Vector, Fluentd and Logstash are in
+[Log collectors](collectors.md).
+
 In a terminal, the classic format is easier to read, and redirecting keeps the events apart:
 
 ```bash
