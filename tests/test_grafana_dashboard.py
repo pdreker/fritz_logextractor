@@ -12,6 +12,8 @@ SCRIPT = Path(__file__).parent.parent / "examples" / "grafana" / "build_dashboar
 
 def load_builder():
     spec = importlib.util.spec_from_file_location("build_dashboard", SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
