@@ -16,7 +16,7 @@
         <link rel="prev" href="../collectors/">
       
       
-        <link rel="next" href="../capture/">
+        <link rel="next" href="../dashboard/">
       
       
         
@@ -495,6 +495,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../dashboard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grafana dashboard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../capture/" class="md-nav__link">
         
   
@@ -614,6 +641,7 @@
 <p>The tool can serve metrics for Prometheus. They tell whether it keeps up with each device: when
 it last read the log, why polls fail, whether the box rebooted while nobody watched. What the
 box logged is in the events; a log stack counts those better (see <a href="../collectors/">Log collectors</a>).</p>
+<p>The <a href="../dashboard/">Grafana dashboard</a> shows them together with the events.</p>
 <p>The metrics are off unless you set a port:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">metrics_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9788</span>
 </code></pre></div>
@@ -794,13 +822,13 @@ the start has no <code>last_success</code> series. Catch that with <code>poll_er
         
         
           
-          <a href="../capture/" class="md-footer__link md-footer__link--next" aria-label="Next: Capturing snapshots">
+          <a href="../dashboard/" class="md-footer__link md-footer__link--next" aria-label="Next: Grafana dashboard">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Capturing snapshots
+                Grafana dashboard
               </div>
             </div>
             <div class="md-footer__button md-icon">

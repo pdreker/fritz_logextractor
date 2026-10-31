@@ -545,6 +545,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../dashboard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grafana dashboard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../capture/" class="md-nav__link">
         
   
@@ -724,6 +751,7 @@ purpose; adapt them to your setup. All of them follow the same plan:</p>
   (own log); Elasticsearch gets one index for events and one for the tool's log. Everything
   else stays in the JSON.</li>
 </ul>
+<p>The <a href="../dashboard/">Grafana dashboard</a> expects the Loki labels of the Alloy example.</p>
 <p>The files are in <a href="https://github.com/pdreker/fritz_logextractor/tree/main/examples"><code>examples/</code></a>
 in the repository.</p>
 <table>
@@ -902,6 +930,13 @@ is <code>fritzlogextractor</code>) from your existing source through <code>loki.
 <span class="w">    </span><span class="nb">rule</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="na">source_labels</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"__meta_kubernetes_namespace"</span><span class="p">]</span>
 <span class="w">        </span><span class="na">target_label</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">"namespace"</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="c1">    // As the other sources; Loki derives service_name="fritzlogextractor" from it,</span>
+<span class="c1">    // which the Grafana dashboard looks for.</span>
+<span class="w">    </span><span class="nb">rule</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="na">target_label</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"job"</span>
+<span class="w">        </span><span class="na">replacement</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">"fritzlogextractor"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="p">}</span>
 
