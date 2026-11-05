@@ -25,6 +25,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/pdreker/fritz_logextractor"
 Repository = "https://github.com/pdreker/fritz_logextractor"
+Documentation = "https://pdreker.github.io/fritz_logextractor/"
 
 [project.scripts]
 fritzlogextractor = "fritzlogextractor.__main__:main"
