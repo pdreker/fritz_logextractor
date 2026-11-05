@@ -11,7 +11,11 @@ from fritzlogextractor.config import (
     UnknownConfigKeyError,
     get_config,
 )
-from fritzlogextractor.config.config import DEFAULT_POLL_INTERVAL, DEFAULT_STATE_DIR, ExtractorConfig
+from fritzlogextractor.config.config import (
+    DEFAULT_POLL_INTERVAL,
+    DEFAULT_STATE_DIR,
+    ExtractorConfig,
+)
 
 
 @pytest.fixture(autouse=True)

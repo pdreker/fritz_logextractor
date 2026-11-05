@@ -165,7 +165,7 @@ class TestServing:
         with patch("fritzlogextractor.__main__.run"):
             main(["--config", metrics_config(unused_port)])
 
-        body = urlopen(f"http://127.0.0.1:{unused_port}/metrics").read().decode()  # noqa: S310
+        body = urlopen(f"http://127.0.0.1:{unused_port}/metrics").read().decode()
         assert "fritzlogextractor_build_info{" in body
         assert "fritzlogextractor_polls_total{" in body
         assert "process_" in body or "python_info" in body
