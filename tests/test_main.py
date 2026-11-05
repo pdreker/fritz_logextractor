@@ -4,6 +4,7 @@ import os
 import signal
 import threading
 from datetime import datetime, timedelta
+from importlib.metadata import version
 
 import pytest
 
@@ -12,20 +13,18 @@ from fritzlogextractor.__main__ import main, stop_on_signals
 from fritzlogextractor.logs import setup_logging
 
 
-def test_version(capsys):
+def test_version(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exc:
         main(["--version"])
     assert exc.value.code == 0
     assert capsys.readouterr().out.strip() == __version__
 
 
-def test_version_comes_from_the_installed_distribution():
-    from importlib.metadata import version
-
+def test_version_comes_from_the_installed_distribution() -> None:
     assert __version__ == version("fritz-logextractor")
 
 
-def test_bad_config_exits_1(monkeypatch):
+def test_bad_config_exits_1(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FRITZ_USERNAME", raising=False)
     monkeypatch.delenv("FRITZ_PASSWORD", raising=False)
     with pytest.raises(SystemExit) as exc:
@@ -33,7 +32,9 @@ def test_bad_config_exits_1(monkeypatch):
     assert exc.value.code == 1
 
 
-def test_own_log_lines_are_json_by_default(monkeypatch, capsys):
+def test_own_log_lines_are_json_by_default(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.delenv("FRITZ_USERNAME", raising=False)
     monkeypatch.delenv("FRITZ_PASSWORD", raising=False)
     with pytest.raises(SystemExit):
@@ -49,7 +50,9 @@ def test_own_log_lines_are_json_by_default(monkeypatch, capsys):
     assert datetime.fromisoformat(record["time"]).utcoffset() == timedelta(0)
 
 
-def test_text_log_format_for_terminals(monkeypatch, capsys):
+def test_text_log_format_for_terminals(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.delenv("FRITZ_USERNAME", raising=False)
     monkeypatch.delenv("FRITZ_PASSWORD", raising=False)
     with pytest.raises(SystemExit):
@@ -61,7 +64,7 @@ def test_text_log_format_for_terminals(monkeypatch, capsys):
     assert not err.lstrip().startswith("{")
 
 
-def test_json_log_line_stays_on_one_line_with_odd_text(capsys):
+def test_json_log_line_stays_on_one_line_with_odd_text(capsys: pytest.CaptureFixture[str]) -> None:
     setup_logging("INFO", "json")
     logging.getLogger("x").warning("two\nlines \x1b[2J and %s", "an arg")
 
@@ -69,7 +72,7 @@ def test_json_log_line_stays_on_one_line_with_odd_text(capsys):
     assert json.loads(line)["msg"] == "two\nlines \x1b[2J and an arg"
 
 
-def test_sigterm_ends_the_run_after_the_current_poll():
+def test_sigterm_ends_the_run_after_the_current_poll() -> None:
     stop = threading.Event()
     stop_on_signals(stop)
 

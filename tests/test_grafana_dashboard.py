@@ -2,6 +2,7 @@ import importlib.util
 import json
 import re
 from pathlib import Path
+from types import ModuleType
 
 from prometheus_client import REGISTRY
 
@@ -10,7 +11,7 @@ import fritzlogextractor.metrics  # noqa: F401  (registers the metrics)
 SCRIPT = Path(__file__).parent.parent / "examples" / "grafana" / "build_dashboard.py"
 
 
-def load_builder():
+def load_builder() -> ModuleType:
     spec = importlib.util.spec_from_file_location("build_dashboard", SCRIPT)
     assert spec is not None
     assert spec.loader is not None
@@ -19,7 +20,7 @@ def load_builder():
     return module
 
 
-def test_json_is_up_to_date():
+def test_json_is_up_to_date() -> None:
     builder = load_builder()
 
     assert builder.OUTPUT.read_text() == builder.render(), (
@@ -27,12 +28,10 @@ def test_json_is_up_to_date():
     )
 
 
-def test_dashboard_uses_every_metric_of_the_tool():
+def test_dashboard_uses_every_metric_of_the_tool() -> None:
     text = load_builder().OUTPUT.read_text()
     metrics = {
-        metric.name
-        for metric in REGISTRY.collect()
-        if metric.name.startswith("fritzlogextractor_")
+        metric.name for metric in REGISTRY.collect() if metric.name.startswith("fritzlogextractor_")
     }
     # Counters are queried with their _total suffix, info metrics with _info.
     used = set(re.findall(r"fritzlogextractor_[a-z_]+", text))
@@ -41,7 +40,7 @@ def test_dashboard_uses_every_metric_of_the_tool():
     assert not missing
 
 
-def test_panels_do_not_overlap_and_ids_are_unique():
+def test_panels_do_not_overlap_and_ids_are_unique() -> None:
     panels = json.loads(load_builder().OUTPUT.read_text())["panels"]
     cells = set()
     for panel in panels:

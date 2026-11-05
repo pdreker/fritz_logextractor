@@ -1,6 +1,7 @@
 """Tracker tests. The scenarios follow captures of a FRITZ!Box 7690 with a mesh repeater."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -16,11 +17,24 @@ def at(text: str) -> datetime:
     return datetime.strptime(text, "%d.%m.%y %H:%M:%S")
 
 
-def row(event_id, text, time, msg="m", count=1, since=None, group="sys"):
+def row(  # noqa: PLR0913, PLR0917 - mirrors the fields of a log row
+    event_id: int,
+    text: str,
+    time: str,
+    msg: str = "m",
+    count: int = 1,
+    since: str | None = None,
+    group: str = "sys",
+) -> Event:
     return Event(event_id, group, at(time), msg, count, at(since) if since else None)
 
 
-def take(tracker, events, boot=BOOT, box_boot=BOX_BOOT):
+def take(
+    tracker: EventLogTracker,
+    events: list[Event],
+    boot: datetime = BOOT,
+    box_boot: datetime | None = BOX_BOOT,
+) -> list[tuple[int, str, int]]:
     """Collect the new entries and commit, as the extractor does."""
     new = tracker.new_entries(events, boot, box_boot)
     tracker.commit(events, boot, box_boot)
@@ -28,12 +42,14 @@ def take(tracker, events, boot=BOOT, box_boot=BOX_BOOT):
 
 
 LOGIN = row(506, "", "31.10.26 03:13:56", "Anmeldung einer App des Benutzers u.")
-PREFIX = row(26, "", "31.10.26 00:33:38", "IPv6-Präfix wurde erfolgreich aktualisiert.", group="net")
+PREFIX = row(
+    26, "", "31.10.26 00:33:38", "IPv6-Präfix wurde erfolgreich aktualisiert.", group="net"
+)
 SYNC = row(2104, "", "31.10.26 00:18:40", "Die Systemzeit wurde erfolgreich aktualisiert.")
 
 
 class TestNewEntries:
-    def test_first_snapshot_is_new_oldest_first_and_folded_rows_count(self):
+    def test_first_snapshot_is_new_oldest_first_and_folded_rows_count(self) -> None:
         folded = row(507, "", "31.10.26 05:26:53", "[fritz.repeater] App", 3, "31.10.26 03:13:58")
 
         assert take(EventLogTracker(), [folded, LOGIN, PREFIX, SYNC]) == [
@@ -43,13 +59,13 @@ class TestNewEntries:
             (507, "05:26:53", 3),
         ]
 
-    def test_same_snapshot_again_is_not_new(self):
+    def test_same_snapshot_again_is_not_new(self) -> None:
         tracker = EventLogTracker()
         take(tracker, [LOGIN, PREFIX])
 
         assert take(tracker, [LOGIN, PREFIX]) == []
 
-    def test_nothing_changes_before_commit(self):
+    def test_nothing_changes_before_commit(self) -> None:
         tracker = EventLogTracker()
         assert len(tracker.new_entries([LOGIN], BOOT, BOX_BOOT)) == 1
         assert len(tracker.new_entries([LOGIN], BOOT, BOX_BOOT)) == 1
@@ -58,7 +74,7 @@ class TestNewEntries:
 
         assert tracker.new_entries([LOGIN], BOOT, BOX_BOOT) == []
 
-    def test_row_folding_at_the_top_counts_the_new_occurrences(self):
+    def test_row_folding_at_the_top_counts_the_new_occurrences(self) -> None:
         tracker = EventLogTracker()
         once = row(506, "", "31.10.26 06:45:31", "App login")
         take(tracker, [once, PREFIX])
@@ -68,7 +84,7 @@ class TestNewEntries:
         assert take(tracker, [twice, PREFIX]) == [(506, "07:45:00", 1)]
         assert take(tracker, [five, PREFIX]) == [(506, "08:16:27", 3)]
 
-    def test_repeat_below_another_row_is_a_new_row(self):
+    def test_repeat_below_another_row_is_a_new_row(self) -> None:
         tracker = EventLogTracker()
         take(tracker, [LOGIN, PREFIX])
         again = row(506, "", "31.10.26 03:45:49", LOGIN.msg)
@@ -79,7 +95,7 @@ class TestNewEntries:
             (506, "03:45:49", 1),
         ]
 
-    def test_mirrored_row_sorted_in_below_a_known_row_is_new(self):
+    def test_mirrored_row_sorted_in_below_a_known_row_is_new(self) -> None:
         tracker = EventLogTracker()
         take(tracker, [LOGIN, PREFIX])
         newer = row(506, "", "31.10.26 03:45:49", "App login from elsewhere")
@@ -88,7 +104,7 @@ class TestNewEntries:
 
         assert take(tracker, [newer, mirrored, LOGIN, PREFIX]) == [(507, "03:13:58", 1)]
 
-    def test_jitter_of_a_second_is_not_new(self):
+    def test_jitter_of_a_second_is_not_new(self) -> None:
         tracker = EventLogTracker()
         a = row(506, "", "16.10.26 01:31:44", "same")
         b = row(506, "", "16.10.26 01:31:43", "same")
@@ -99,7 +115,7 @@ class TestNewEntries:
         assert take(tracker, [a1, b1]) == []
         assert take(tracker, [a, b]) == []
 
-    def test_rows_dropping_off_the_end_are_not_new_and_not_back(self):
+    def test_rows_dropping_off_the_end_are_not_new_and_not_back(self) -> None:
         tracker = EventLogTracker()
         take(tracker, [LOGIN, PREFIX, SYNC])
 
@@ -108,7 +124,7 @@ class TestNewEntries:
 
 
 class TestReboot:
-    def test_rows_before_clock_sync_are_matched_after_the_box_rewrote_them(self):
+    def test_rows_before_clock_sync_are_matched_after_the_box_rewrote_them(self) -> None:
         tracker = EventLogTracker()
         training = row(12, "", "01.01.70 00:00:34", "DSL training", group="net")
         dsl = row(11, "", "01.01.70 00:01:43", "DSL up", group="net")
@@ -127,7 +143,7 @@ class TestReboot:
         assert take(tracker, rewritten, box_boot=box_boot) == [(2104, "00:18:40", 1)]
         assert take(tracker, rewritten, box_boot=box_boot) == []
 
-    def test_new_boot_makes_every_row_new(self):
+    def test_new_boot_makes_every_row_new(self) -> None:
         tracker = EventLogTracker()
         training = row(12, "", "01.01.70 00:00:34", "DSL training", group="net")
         take(tracker, [training], box_boot=None)
@@ -136,13 +152,13 @@ class TestReboot:
         assert take(tracker, [training], boot=later, box_boot=None) == [(12, "00:00:34", 1)]
 
     @pytest.mark.parametrize("seconds", [-60, -1, 1, 60])
-    def test_boot_estimate_wobbling_is_the_same_boot(self, seconds):
+    def test_boot_estimate_wobbling_is_the_same_boot(self, seconds: int) -> None:
         tracker = EventLogTracker()
         take(tracker, [LOGIN])
 
         assert take(tracker, [LOGIN], boot=BOOT + timedelta(seconds=seconds)) == []
 
-    def test_is_same_boot(self):
+    def test_is_same_boot(self) -> None:
         tracker = EventLogTracker()
         assert not tracker.is_same_boot(BOOT)
         take(tracker, [])
@@ -151,7 +167,7 @@ class TestReboot:
 
 
 class TestJson:
-    def test_round_trip_keeps_what_was_emitted(self):
+    def test_round_trip_keeps_what_was_emitted(self) -> None:
         tracker = EventLogTracker()
         folded = row(507, "", "31.10.26 05:26:53", "App", 3, "31.10.26 03:13:58")
         take(tracker, [folded, LOGIN])
@@ -174,6 +190,6 @@ class TestJson:
             {"version": 1, "boot": None, "rows": [[1, "sys", "m", "now", 1]]},
         ],
     )
-    def test_malformed_state_raises_value_error(self, data):
+    def test_malformed_state_raises_value_error(self, data: dict[str, Any]) -> None:
         with pytest.raises(ValueError):  # noqa: PT011
             EventLogTracker.from_json(data)

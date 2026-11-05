@@ -1,5 +1,7 @@
 import json
 import socket
+from collections.abc import Callable
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.request import urlopen
 
@@ -24,7 +26,7 @@ def positive(name: str, device: str) -> bool:
 
 @patch("fritzlogextractor.extractor.FritzConnection")
 class TestMetrics:
-    def test_series_exist_at_zero_before_the_first_poll(self, mock_fc_cls):
+    def test_series_exist_at_zero_before_the_first_poll(self, mock_fc_cls: MagicMock) -> None:
         DeviceExtractor(device(name="m-init"))
 
         assert value("polls_total", "m-init") == 0
@@ -32,7 +34,9 @@ class TestMetrics:
         assert value("poll_errors_total", "m-init", reason="auth") == 0
         assert value("last_success_timestamp_seconds", "m-init") is None
 
-    def test_successful_poll_counts_events_rows_and_success(self, mock_fc_cls, capsys):
+    def test_successful_poll_counts_events_rows_and_success(
+        self, mock_fc_cls: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         bad = ("x", "sys", "09.10.26", "08:31:40", "m")
         setup_fc(mock_fc_cls, log_xml(LOGIN, CONNECTED, bad))
 
@@ -52,7 +56,9 @@ class TestMetrics:
             (FritzConnectionException("down"), "connection"),
         ],
     )
-    def test_failed_poll_counts_its_reason(self, mock_fc_cls, error, reason):
+    def test_failed_poll_counts_its_reason(
+        self, mock_fc_cls: MagicMock, error: Exception, reason: str
+    ) -> None:
         mock_fc_cls.side_effect = error
         name = f"m-{reason}"
 
@@ -62,7 +68,7 @@ class TestMetrics:
         assert value("poll_errors_total", name, reason=reason) == 1
         assert value("last_success_timestamp_seconds", name) is None
 
-    def test_parse_and_unexpected_errors_have_their_reasons(self, mock_fc_cls):
+    def test_parse_and_unexpected_errors_have_their_reasons(self, mock_fc_cls: MagicMock) -> None:
         setup_fc(mock_fc_cls, b"<html>login</html>")
         buggy = MagicMock(spec=DeviceExtractor)
         buggy.name = "m-buggy"
@@ -73,7 +79,9 @@ class TestMetrics:
         assert value("poll_errors_total", "m-parse", reason="parse") == 1
         assert value("poll_errors_total", "m-buggy", reason="unexpected") == 1
 
-    def test_reboot_counts_once_with_the_unwatched_time(self, mock_fc_cls, capsys):
+    def test_reboot_counts_once_with_the_unwatched_time(
+        self, mock_fc_cls: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # Uptime 3600 s, then 60 s: the box rebooted about a minute before the second poll.
         setup_fc(
             mock_fc_cls,
@@ -94,7 +102,9 @@ class TestMetrics:
         # The test's boot lies before its first poll; a negative time comes out as 0.
         assert value("reboot_unwatched_seconds", "m-reboot") == 0
 
-    def test_reboot_while_the_tool_was_down_is_counted_from_the_state(self, mock_fc_cls, tmp_path):
+    def test_reboot_while_the_tool_was_down_is_counted_from_the_state(
+        self, mock_fc_cls: MagicMock, tmp_path: Path
+    ) -> None:
         setup_fc(
             mock_fc_cls,
             log_xml(CONNECTED),
@@ -115,7 +125,9 @@ class TestMetrics:
         assert unwatched is not None
         assert unwatched > 3600
 
-    def test_state_without_poll_time_still_counts_the_reboot(self, mock_fc_cls, tmp_path):
+    def test_state_without_poll_time_still_counts_the_reboot(
+        self, mock_fc_cls: MagicMock, tmp_path: Path
+    ) -> None:
         setup_fc(
             mock_fc_cls,
             log_xml(CONNECTED),
@@ -133,7 +145,9 @@ class TestMetrics:
         assert value("box_reboots_total", "m-old") == 1
         assert value("reboot_unwatched_seconds", "m-old") is None
 
-    def test_state_write_errors_are_counted_every_time(self, mock_fc_cls, tmp_path):
+    def test_state_write_errors_are_counted_every_time(
+        self, mock_fc_cls: MagicMock, tmp_path: Path
+    ) -> None:
         blocked = tmp_path / "file"
         blocked.write_text("")
         setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(CONNECTED))
@@ -146,13 +160,14 @@ class TestMetrics:
 
 
 @pytest.fixture
-def metrics_config(tmp_path):
-    def write(port):
+def metrics_config(tmp_path: Path) -> Callable[[int], str]:
+    def write(port: int) -> str:
         path = tmp_path / "config.yaml"
         path.write_text(
             f"state_dir: {tmp_path / 'state'}\n"
             f"metrics_port: {port}\nmetrics_address: 127.0.0.1\n"
-            "devices:\n  - name: m-main\n    hostname: fritz.box\n    username: u\n    password: p\n"
+            "devices:\n"
+            "  - name: m-main\n    hostname: fritz.box\n    username: u\n    password: p\n"
         )
         return str(path)
 
@@ -161,17 +176,21 @@ def metrics_config(tmp_path):
 
 @patch("fritzlogextractor.extractor.FritzConnection")
 class TestServing:
-    def test_port_is_served_with_build_info(self, mock_fc_cls, metrics_config, unused_port):
+    def test_port_is_served_with_build_info(
+        self, mock_fc_cls: MagicMock, metrics_config: Callable[[int], str], unused_port: int
+    ) -> None:
         with patch("fritzlogextractor.__main__.run"):
             main(["--config", metrics_config(unused_port)])
 
-        body = urlopen(f"http://127.0.0.1:{unused_port}/metrics").read().decode()  # noqa: S310
+        body = urlopen(f"http://127.0.0.1:{unused_port}/metrics").read().decode()
         assert "fritzlogextractor_build_info{" in body
         assert "fritzlogextractor_polls_total{" in body
         assert "process_" in body or "python_info" in body
         assert "_created" not in body
 
-    def test_once_does_not_serve(self, mock_fc_cls, metrics_config):
+    def test_once_does_not_serve(
+        self, mock_fc_cls: MagicMock, metrics_config: Callable[[int], str]
+    ) -> None:
         with (
             patch("fritzlogextractor.__main__.run"),
             patch("fritzlogextractor.metrics.serve") as serve,
@@ -180,7 +199,12 @@ class TestServing:
 
         serve.assert_not_called()
 
-    def test_port_in_use_exits_1(self, mock_fc_cls, metrics_config, capsys):
+    def test_port_in_use_exits_1(
+        self,
+        mock_fc_cls: MagicMock,
+        metrics_config: Callable[[int], str],
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         with (
             patch("fritzlogextractor.__main__.run") as run,
             patch("fritzlogextractor.metrics.serve", side_effect=OSError(98, "Address in use")),
@@ -194,7 +218,7 @@ class TestServing:
 
 
 @pytest.fixture
-def unused_port():
+def unused_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
