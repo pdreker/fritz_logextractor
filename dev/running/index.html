@@ -949,9 +949,9 @@ is gone before the new one starts, and <code>fsGroup</code> makes the volume wri
 <p>The state file takes about 150 bytes per row of the box's log: 85 KB for the 567 rows a
 FRITZ!Box 7690 held after two weeks.</p>
 <h2 id="without-a-container">Without a container<a class="headerlink" href="#without-a-container" title="Permanent link">&para;</a></h2>
-<p>The tool is not on PyPI. Install it with <a href="https://docs.astral.sh/uv/">uv</a> straight from GitHub,
-or run it from a clone:</p>
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>git+https://github.com/pdreker/fritz_logextractor
+<p>Install it from <a href="https://pypi.org/project/fritz-logextractor/">PyPI</a> with
+<a href="https://docs.astral.sh/uv/">uv</a> (or <code>pipx install fritz-logextractor</code>), or run it from a clone:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>fritz-logextractor
 fritzlogextractor<span class="w"> </span>--config<span class="w"> </span>config.yaml
 </code></pre></div>
 <div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/pdreker/fritz_logextractor<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>fritz_logextractor
