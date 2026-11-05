@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from fritzlogextractor.config import (
@@ -19,7 +21,7 @@ from fritzlogextractor.config.config import (
 
 
 @pytest.fixture(autouse=True)
-def _clean_env(monkeypatch) -> None:
+def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in (
         "FRITZ_HOSTNAME",
         "FRITZ_NAME",
@@ -51,7 +53,7 @@ class TestFileConfig:
         assert config.metrics_port == 9788
         assert config.metrics_address == "127.0.0.1"
 
-    def test_metrics_are_off_by_default(self, tmp_path) -> None:
+    def test_metrics_are_off_by_default(self, tmp_path: Path) -> None:
         path = tmp_path / "c.yaml"
         path.write_text("devices:\n  - username: u\n    password: p\n")
 
@@ -61,7 +63,7 @@ class TestFileConfig:
         assert config.metrics_address == "0.0.0.0"
 
     @pytest.mark.parametrize("port", [0, 65536, -1])
-    def test_metrics_port_must_be_a_port(self, tmp_path, port) -> None:
+    def test_metrics_port_must_be_a_port(self, tmp_path: Path, port) -> None:
         path = tmp_path / "c.yaml"
         path.write_text(f"metrics_port: {port}\ndevices:\n  - username: u\n    password: p\n")
 
@@ -72,7 +74,7 @@ class TestFileConfig:
         with pytest.raises(ConfigFileUnreadableError, match="cannot read .*does-not-exist.yaml"):
             get_config("tests/conffiles/does-not-exist.yaml")
 
-    def test_invalid_yaml(self, tmp_path) -> None:
+    def test_invalid_yaml(self, tmp_path: Path) -> None:
         bad = tmp_path / "bad.yaml"
         bad.write_text("devices: [\n")
 
@@ -146,7 +148,7 @@ class TestFileConfig:
 
 
 class TestEnvConfig:
-    def test_minimal_env(self, monkeypatch) -> None:
+    def test_minimal_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FRITZ_USERNAME", "logreader")
         monkeypatch.setenv("FRITZ_PASSWORD", "secret")
 
@@ -160,14 +162,14 @@ class TestEnvConfig:
         assert dev.use_tls is False
         assert config.metrics_port is None
 
-    def test_empty_metrics_port_means_off(self, monkeypatch) -> None:
+    def test_empty_metrics_port_means_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FRITZ_USERNAME", "logreader")
         monkeypatch.setenv("FRITZ_PASSWORD", "secret")
         monkeypatch.setenv("FRITZ_METRICS_PORT", "")
 
         assert get_config(None).metrics_port is None
 
-    def test_full_env(self, monkeypatch) -> None:
+    def test_full_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FRITZ_USERNAME", "logreader")
         monkeypatch.setenv("FRITZ_PASSWORD", "secret")
         monkeypatch.setenv("FRITZ_HOSTNAME", "192.168.178.1")
@@ -193,29 +195,29 @@ class TestEnvConfig:
         assert config.devices[0].use_tls is True
         assert config.devices[0].connection_timeout == 5
 
-    def test_missing_username(self, monkeypatch) -> None:
+    def test_missing_username(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FRITZ_PASSWORD", "secret")
         with pytest.raises(ValueError, match="username"):
             get_config(None)
 
-    def test_missing_password(self, monkeypatch) -> None:
+    def test_missing_password(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FRITZ_USERNAME", "logreader")
         with pytest.raises(FritzPasswordMissingError):
             get_config(None)
 
-    def test_password_too_long(self, monkeypatch) -> None:
+    def test_password_too_long(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FRITZ_USERNAME", "logreader")
         monkeypatch.setenv("FRITZ_PASSWORD", "x" * 33)
         with pytest.raises(FritzPasswordTooLongError):
             get_config(None)
 
-    def test_password_file_missing(self, monkeypatch) -> None:
+    def test_password_file_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FRITZ_USERNAME", "logreader")
         monkeypatch.setenv("FRITZ_PASSWORD_FILE", "/does/not/exist")
         with pytest.raises(FritzPasswordFileDoesNotExistError):
             get_config(None)
 
-    def test_password_file(self, monkeypatch, tmp_path) -> None:
+    def test_password_file(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         pw = tmp_path / "pw"
         pw.write_text("secret\n")
         monkeypatch.setenv("FRITZ_USERNAME", "logreader")

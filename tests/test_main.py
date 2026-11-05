@@ -12,7 +12,7 @@ from fritzlogextractor.__main__ import main, stop_on_signals
 from fritzlogextractor.logs import setup_logging
 
 
-def test_version(capsys) -> None:
+def test_version(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exc:
         main(["--version"])
     assert exc.value.code == 0
@@ -25,7 +25,7 @@ def test_version_comes_from_the_installed_distribution() -> None:
     assert __version__ == version("fritz-logextractor")
 
 
-def test_bad_config_exits_1(monkeypatch) -> None:
+def test_bad_config_exits_1(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FRITZ_USERNAME", raising=False)
     monkeypatch.delenv("FRITZ_PASSWORD", raising=False)
     with pytest.raises(SystemExit) as exc:
@@ -33,7 +33,9 @@ def test_bad_config_exits_1(monkeypatch) -> None:
     assert exc.value.code == 1
 
 
-def test_own_log_lines_are_json_by_default(monkeypatch, capsys) -> None:
+def test_own_log_lines_are_json_by_default(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.delenv("FRITZ_USERNAME", raising=False)
     monkeypatch.delenv("FRITZ_PASSWORD", raising=False)
     with pytest.raises(SystemExit):
@@ -49,7 +51,9 @@ def test_own_log_lines_are_json_by_default(monkeypatch, capsys) -> None:
     assert datetime.fromisoformat(record["time"]).utcoffset() == timedelta(0)
 
 
-def test_text_log_format_for_terminals(monkeypatch, capsys) -> None:
+def test_text_log_format_for_terminals(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.delenv("FRITZ_USERNAME", raising=False)
     monkeypatch.delenv("FRITZ_PASSWORD", raising=False)
     with pytest.raises(SystemExit):
@@ -61,7 +65,7 @@ def test_text_log_format_for_terminals(monkeypatch, capsys) -> None:
     assert not err.lstrip().startswith("{")
 
 
-def test_json_log_line_stays_on_one_line_with_odd_text(capsys) -> None:
+def test_json_log_line_stays_on_one_line_with_odd_text(capsys: pytest.CaptureFixture[str]) -> None:
     setup_logging("INFO", "json")
     logging.getLogger("x").warning("two\nlines \x1b[2J and %s", "an arg")
 
