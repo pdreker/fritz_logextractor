@@ -216,9 +216,8 @@ class TestRecord:
         rec = record(self.event(f"DynDNS-Fehler: {url} antwortet nicht."))
 
         assert "not-a-real-token" not in rec["msg"]
-        host = (
-            url.rsplit("@", maxsplit=1)[-1].rsplit("://", maxsplit=1)[-1].split("/", maxsplit=1)[0]
-        )
+        authority = url.rsplit("@", maxsplit=1)[-1].rsplit("://", maxsplit=1)[-1]
+        host = authority.split("/", maxsplit=1)[0]
         scheme = url.split("://", maxsplit=1)[0]
         assert rec["msg"] == f"DynDNS-Fehler: {scheme}://{host}/<redacted> antwortet nicht."
 
