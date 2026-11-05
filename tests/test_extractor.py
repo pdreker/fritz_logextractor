@@ -128,7 +128,9 @@ class TestDeviceExtractor:
 
         assert mock_fc_cls.call_args.kwargs["password"] == "from-file"
 
-    @pytest.mark.parametrize(("content", "error"), [(None, "No such file"), ("x" * 33, "longer than 32")])
+    @pytest.mark.parametrize(
+        ("content", "error"), [(None, "No such file"), ("x" * 33, "longer than 32")]
+    )
     def test_bad_password_file_is_an_extraction_error(self, mock_fc_cls, tmp_path, content, error):
         pw = tmp_path / "pw"
         pw.write_text("p")
@@ -203,7 +205,9 @@ class TestDeviceExtractor:
     def test_device_info_is_required(self, mock_fc_cls):
         setup_fc(mock_fc_cls, log_xml(CONNECTED), device_info=NO_INFO)
 
-        with pytest.raises(ExtractionError, match=r"could not read the event log \(FritzActionError\)"):
+        with pytest.raises(
+            ExtractionError, match=r"could not read the event log \(FritzActionError\)"
+        ):
             DeviceExtractor(device()).poll()
 
     def test_http_error_raises_and_loses_nothing(self, mock_fc_cls):
@@ -279,9 +283,7 @@ TRAINING = ("12", "net", "01.01.70", "00:00:34", "DSL-Synchronisierung beginnt (
 
 @patch("fritzlogextractor.extractor.FritzConnection")
 class TestReboot:
-    def test_row_before_sync_is_estimated_on_our_clock_while_the_box_has_no_time(
-        self, mock_fc_cls
-    ):
+    def test_row_before_sync_is_estimated_on_our_clock_while_the_box_has_no_time(self, mock_fc_cls):
         setup_fc(
             mock_fc_cls,
             log_xml(TRAINING),
@@ -503,7 +505,9 @@ def config_file(tmp_path):
 
 @patch("fritzlogextractor.extractor.FritzConnection")
 class TestMain:
-    def test_poll_all_prints_json_lines_and_keeps_going_on_errors(self, mock_fc_cls, capsys, caplog):
+    def test_poll_all_prints_json_lines_and_keeps_going_on_errors(
+        self, mock_fc_cls, capsys, caplog
+    ):
         setup_fc(mock_fc_cls, log_xml(LOGIN, CONNECTED))
         broken = MagicMock(spec=DeviceExtractor)
         broken.name = "Broken"
@@ -571,4 +575,7 @@ class TestMain:
         main(["--config", config_file, "--once", "--capture", str(tmp_path / "cap")])
 
         assert len(capsys.readouterr().out.splitlines()) == 2
-        assert sorted(d.name for d in (tmp_path / "cap").iterdir()) == ["Fritz_Box_7590", "Repeater"]
+        assert sorted(d.name for d in (tmp_path / "cap").iterdir()) == [
+            "Fritz_Box_7590",
+            "Repeater",
+        ]

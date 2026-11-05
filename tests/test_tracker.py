@@ -28,7 +28,9 @@ def take(tracker, events, boot=BOOT, box_boot=BOX_BOOT):
 
 
 LOGIN = row(506, "", "31.10.26 03:13:56", "Anmeldung einer App des Benutzers u.")
-PREFIX = row(26, "", "31.10.26 00:33:38", "IPv6-Präfix wurde erfolgreich aktualisiert.", group="net")
+PREFIX = row(
+    26, "", "31.10.26 00:33:38", "IPv6-Präfix wurde erfolgreich aktualisiert.", group="net"
+)
 SYNC = row(2104, "", "31.10.26 00:18:40", "Die Systemzeit wurde erfolgreich aktualisiert.")
 
 

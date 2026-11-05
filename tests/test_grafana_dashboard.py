@@ -30,9 +30,7 @@ def test_json_is_up_to_date():
 def test_dashboard_uses_every_metric_of_the_tool():
     text = load_builder().OUTPUT.read_text()
     metrics = {
-        metric.name
-        for metric in REGISTRY.collect()
-        if metric.name.startswith("fritzlogextractor_")
+        metric.name for metric in REGISTRY.collect() if metric.name.startswith("fritzlogextractor_")
     }
     # Counters are queried with their _total suffix, info metrics with _info.
     used = set(re.findall(r"fritzlogextractor_[a-z_]+", text))

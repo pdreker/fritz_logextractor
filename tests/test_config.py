@@ -21,9 +21,18 @@ from fritzlogextractor.config.config import (
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
     for var in (
-        "FRITZ_HOSTNAME", "FRITZ_NAME", "FRITZ_USERNAME", "FRITZ_PASSWORD", "FRITZ_PASSWORD_FILE",
-        "FRITZ_USE_TLS", "FRITZ_CONNECTION_TIMEOUT", "FRITZ_LOG_LEVEL", "FRITZ_POLL_INTERVAL",
-        "FRITZ_STATE_DIR", "FRITZ_METRICS_PORT", "FRITZ_METRICS_ADDRESS",
+        "FRITZ_HOSTNAME",
+        "FRITZ_NAME",
+        "FRITZ_USERNAME",
+        "FRITZ_PASSWORD",
+        "FRITZ_PASSWORD_FILE",
+        "FRITZ_USE_TLS",
+        "FRITZ_CONNECTION_TIMEOUT",
+        "FRITZ_LOG_LEVEL",
+        "FRITZ_POLL_INTERVAL",
+        "FRITZ_STATE_DIR",
+        "FRITZ_METRICS_PORT",
+        "FRITZ_METRICS_ADDRESS",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -90,9 +99,9 @@ class TestFileConfig:
 
     def test_log_level_ignores_case(self):
         device = {"username": "u", "password": "p"}
-        assert ExtractorConfig.from_config({"devices": [device], "log_level": "debug"}).log_level == (
-            "DEBUG"
-        )
+        assert ExtractorConfig.from_config(
+            {"devices": [device], "log_level": "debug"}
+        ).log_level == ("DEBUG")
 
     def test_empty_config(self):
         with pytest.raises(EmptyConfigError):
@@ -106,7 +115,6 @@ class TestFileConfig:
         device = {"username": "u", "password": "p"}
         with pytest.raises(ValueError, match="poll_interval"):
             ExtractorConfig.from_config({"devices": [device], "poll_interval": 5})
-
 
     def test_name_defaults_to_the_hostname(self):
         device = {"hostname": "Fritz.Repeater", "username": "u", "password": "p"}

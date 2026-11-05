@@ -67,7 +67,13 @@ class TestParse:
         assert parsed.events[1].first == parsed.events[1].timestamp
 
     def test_counter_in_another_language_is_split_off(self):
-        row = ("504", "sys", "09.10.26", "21:49:06", "Login failed. [3 messages since 09.10.26 21:40:00]")
+        row = (
+            "504",
+            "sys",
+            "09.10.26",
+            "21:49:06",
+            "Login failed. [3 messages since 09.10.26 21:40:00]",
+        )
 
         event = parse_event_log(event_xml(row)).events[0]
 
@@ -75,7 +81,13 @@ class TestParse:
         assert event.since == datetime(2026, 10, 9, 21, 40)
 
     def test_brackets_inside_a_message_are_not_a_counter(self):
-        row = ("719", "wlan", "09.10.26", "21:49:06", "[fritz.repeater] Anmeldung [2 Meldungen] gescheitert.")
+        row = (
+            "719",
+            "wlan",
+            "09.10.26",
+            "21:49:06",
+            "[fritz.repeater] Anmeldung [2 Meldungen] gescheitert.",
+        )
 
         event = parse_event_log(event_xml(row)).events[0]
 
