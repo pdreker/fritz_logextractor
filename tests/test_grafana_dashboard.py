@@ -19,7 +19,7 @@ def load_builder():
     return module
 
 
-def test_json_is_up_to_date():
+def test_json_is_up_to_date() -> None:
     builder = load_builder()
 
     assert builder.OUTPUT.read_text() == builder.render(), (
@@ -27,7 +27,7 @@ def test_json_is_up_to_date():
     )
 
 
-def test_dashboard_uses_every_metric_of_the_tool():
+def test_dashboard_uses_every_metric_of_the_tool() -> None:
     text = load_builder().OUTPUT.read_text()
     metrics = {
         metric.name for metric in REGISTRY.collect() if metric.name.startswith("fritzlogextractor_")
@@ -39,7 +39,7 @@ def test_dashboard_uses_every_metric_of_the_tool():
     assert not missing
 
 
-def test_panels_do_not_overlap_and_ids_are_unique():
+def test_panels_do_not_overlap_and_ids_are_unique() -> None:
     panels = json.loads(load_builder().OUTPUT.read_text())["panels"]
     cells = set()
     for panel in panels:

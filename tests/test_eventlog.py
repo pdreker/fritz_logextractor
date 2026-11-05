@@ -30,16 +30,20 @@ LOGIN = (
     "sys",
     "09.10.26",
     "21:49:06",
-    "Anmeldung des Benutzers exporter an der FRITZ!Box-Benutzeroberfläche "
-    "von IP-Adresse 192.0.2.10. [2 Meldungen seit 09.10.26 21:48:36]",
+    (
+        "Anmeldung des Benutzers exporter an der FRITZ!Box-Benutzeroberfläche "
+        "von IP-Adresse 192.0.2.10. [2 Meldungen seit 09.10.26 21:48:36]"
+    ),
 )
 CONNECTED = (
     "22",
     "net",
     "09.10.26",
     "08:31:57",
-    "Internetverbindung wurde erfolgreich hergestellt. IP-Adresse: 198.51.100.7, "
-    "DNS-Server: 198.51.100.1 und 198.51.100.2, Gateway: 198.51.100.1",
+    (
+        "Internetverbindung wurde erfolgreich hergestellt. IP-Adresse: 198.51.100.7, "
+        "DNS-Server: 198.51.100.1 und 198.51.100.2, Gateway: 198.51.100.1"
+    ),
 )
 PROVIDER = (
     "332",
@@ -51,7 +55,7 @@ PROVIDER = (
 
 
 class TestParse:
-    def test_parses_all_fields_newest_first(self):
+    def test_parses_all_fields_newest_first(self) -> None:
         parsed = parse_event_log(event_xml(LOGIN, CONNECTED, PROVIDER))
 
         assert parsed.rejected == []
@@ -66,7 +70,7 @@ class TestParse:
         assert parsed.events[1].since is None
         assert parsed.events[1].first == parsed.events[1].timestamp
 
-    def test_counter_in_another_language_is_split_off(self):
+    def test_counter_in_another_language_is_split_off(self) -> None:
         row = (
             "504",
             "sys",
@@ -80,7 +84,7 @@ class TestParse:
         assert (event.msg, event.count) == ("Login failed.", 3)
         assert event.since == datetime(2026, 10, 9, 21, 40)
 
-    def test_brackets_inside_a_message_are_not_a_counter(self):
+    def test_brackets_inside_a_message_are_not_a_counter(self) -> None:
         row = (
             "719",
             "wlan",
@@ -94,7 +98,7 @@ class TestParse:
         assert event.msg == row[4]
         assert event.count == 1
 
-    def test_row_before_clock_sync_is_marked(self):
+    def test_row_before_clock_sync_is_marked(self) -> None:
         row = ("12", "net", "01.01.70", "00:00:34", "DSL-Synchronisierung beginnt (Training).")
 
         event = parse_event_log(event_xml(row, PROVIDER)).events
@@ -114,13 +118,13 @@ class TestParse:
             ("1", "", "09.10.26", "08:31:40", "m"),
         ],
     )
-    def test_bad_entry_is_rejected_and_good_ones_survive(self, bad):
+    def test_bad_entry_is_rejected_and_good_ones_survive(self, bad) -> None:
         parsed = parse_event_log(event_xml(bad, PROVIDER))
 
         assert [e.id for e in parsed.events] == [332]
         assert len(parsed.rejected) == 1
 
-    def test_entry_with_missing_field_is_rejected(self):
+    def test_entry_with_missing_field_is_rejected(self) -> None:
         xml = b"<DeviceLog><Event><id>1</id><group>sys</group></Event></DeviceLog>"
 
         parsed = parse_event_log(xml)
@@ -136,11 +140,11 @@ class TestParse:
             b'<!DOCTYPE x [<!ENTITY a "b">]><DeviceLog>&a;</DeviceLog>',
         ],
     )
-    def test_document_that_is_not_a_device_log_raises(self, xml):
+    def test_document_that_is_not_a_device_log_raises(self, xml) -> None:
         with pytest.raises(EventLogParseError):
             parse_event_log(xml)
 
-    def test_empty_log_is_valid(self):
+    def test_empty_log_is_valid(self) -> None:
         assert parse_event_log(b"<DeviceLog></DeviceLog>").events == []
 
 
@@ -155,7 +159,7 @@ class TestRecord:
     def event(self, msg: str) -> Event:
         return Event(id=504, group="sys", timestamp=STAMP, msg=msg)
 
-    def test_layout(self):
+    def test_layout(self) -> None:
         rec = record(
             self.event("hello"),
             with_offset(STAMP, CEST),
@@ -177,12 +181,12 @@ class TestRecord:
             "repeat": 3,
         }
 
-    def test_unknown_offset_gives_time_without_offset(self):
+    def test_unknown_offset_gives_time_without_offset(self) -> None:
         assert record(self.event("hello"), with_offset(STAMP, None))["event_time"] == (
             "2026-10-09T22:11:35"
         )
 
-    def test_control_characters_cannot_forge_a_json_line(self):
+    def test_control_characters_cannot_forge_a_json_line(self) -> None:
         evil = 'user\n{"event_time": "2000-01-01T00:00:00Z"}\r\x1b[2J\x00'
 
         line = json.dumps(record(self.event(evil)), ensure_ascii=False)
@@ -202,7 +206,7 @@ class TestRecord:
             "http://user:not-a-real-token@ddns.example.invalid:8080/nic/update",
         ],
     )
-    def test_urls_keep_only_scheme_and_host(self, url):
+    def test_urls_keep_only_scheme_and_host(self, url) -> None:
         rec = record(self.event(f"DynDNS-Fehler: {url} antwortet nicht."))
 
         assert "not-a-real-token" not in rec["msg"]
@@ -210,11 +214,11 @@ class TestRecord:
         scheme = url.split("://")[0]
         assert rec["msg"] == f"DynDNS-Fehler: {scheme}://{host}/<redacted> antwortet nicht."
 
-    def test_url_without_path_stays(self):
+    def test_url_without_path_stays(self) -> None:
         assert record(self.event("see https://ddns.example.invalid"))["msg"] == (
             "see https://ddns.example.invalid"
         )
 
-    def test_token_at_start_is_redacted_but_other_q_words_are_not(self):
+    def test_token_at_start_is_redacted_but_other_q_words_are_not(self) -> None:
         assert record(self.event("q=abc123"))["msg"] == "q=<redacted>"
         assert record(self.event("freq=5 seq=7"))["msg"] == "freq=5 seq=7"
