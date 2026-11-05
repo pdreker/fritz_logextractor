@@ -168,11 +168,11 @@ FRITZ!Box 7690 held after two weeks.
 
 ## Without a container
 
-The tool is not on PyPI. Install it with [uv](https://docs.astral.sh/uv/) straight from GitHub,
-or run it from a clone:
+Install it from [PyPI](https://pypi.org/project/fritz-logextractor/) with
+[uv](https://docs.astral.sh/uv/) (or `pipx install fritz-logextractor`), or run it from a clone:
 
 ```bash
-uv tool install git+https://github.com/pdreker/fritz_logextractor
+uv tool install fritz-logextractor
 fritzlogextractor --config config.yaml
 ```
 
