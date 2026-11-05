@@ -4,6 +4,7 @@ import os
 import signal
 import threading
 from datetime import datetime, timedelta
+from importlib.metadata import version
 
 import pytest
 
@@ -20,8 +21,6 @@ def test_version(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_version_comes_from_the_installed_distribution() -> None:
-    from importlib.metadata import version
-
     assert __version__ == version("fritz-logextractor")
 
 

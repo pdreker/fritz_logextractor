@@ -2,6 +2,7 @@ import importlib.util
 import json
 import re
 from pathlib import Path
+from types import ModuleType
 
 from prometheus_client import REGISTRY
 
@@ -10,7 +11,7 @@ import fritzlogextractor.metrics  # noqa: F401  (registers the metrics)
 SCRIPT = Path(__file__).parent.parent / "examples" / "grafana" / "build_dashboard.py"
 
 
-def load_builder():
+def load_builder() -> ModuleType:
     spec = importlib.util.spec_from_file_location("build_dashboard", SCRIPT)
     assert spec is not None
     assert spec.loader is not None

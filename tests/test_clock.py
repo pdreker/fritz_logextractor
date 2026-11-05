@@ -1,6 +1,6 @@
 """Clock tests: times before sync, time zone rules (rules adapted from fritz_exporter PR #719)."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 
 import pytest
 
@@ -44,7 +44,7 @@ class TestBoxClock:
         assert BoxClock(BOOT).event_time(row(stamp)) == stamp
 
 
-def timezone_of(offset: timedelta):
+def timezone_of(offset: timedelta) -> tzinfo | None:
     return with_offset(datetime(2000, 1, 1), offset).tzinfo
 
 
@@ -74,7 +74,7 @@ class TestUtcOffset:
             (datetime(2026, 10, 25, 3, 0, 0), CET),
         ],
     )
-    def test_both_switches(self, local, expected) -> None:
+    def test_both_switches(self, local: datetime, expected: timedelta) -> None:
         assert resolve_utc_offset(local, TZ_RULE, timedelta(hours=9)) == expected
 
     def test_entry_before_last_switch_does_not_use_current_offset(self) -> None:
@@ -105,6 +105,6 @@ class TestUtcOffset:
             "CET-30CEST,M3.5.0,M10.5.0",
         ],
     )
-    def test_unparsable_rule_falls_back_to_current_offset(self, rule) -> None:
+    def test_unparsable_rule_falls_back_to_current_offset(self, rule: str) -> None:
         assert resolve_utc_offset(datetime(2026, 7, 1), rule, CET) == CET
         assert resolve_utc_offset(datetime(2026, 7, 1), rule, None) is None

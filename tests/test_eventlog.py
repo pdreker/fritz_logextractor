@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -22,7 +23,8 @@ def event_xml(*events: tuple[str, str, str, str, str]) -> bytes:
         f"<Event><id>{i}</id><group>{g}</group><date>{d}</date><time>{t}</time><msg>{m}</msg></Event>"
         for i, g, d, t, m in events
     )
-    return f'<?xml version="1.0" encoding="UTF-8"?><DeviceLog><!-- filter :all -->{body}</DeviceLog>'.encode()
+    header = '<?xml version="1.0" encoding="UTF-8"?>'
+    return f"{header}<DeviceLog><!-- filter :all -->{body}</DeviceLog>".encode()
 
 
 LOGIN = (
@@ -118,7 +120,9 @@ class TestParse:
             ("1", "", "09.10.26", "08:31:40", "m"),
         ],
     )
-    def test_bad_entry_is_rejected_and_good_ones_survive(self, bad) -> None:
+    def test_bad_entry_is_rejected_and_good_ones_survive(
+        self, bad: tuple[str, str, str, str, str]
+    ) -> None:
         parsed = parse_event_log(event_xml(bad, PROVIDER))
 
         assert [e.id for e in parsed.events] == [332]
@@ -140,7 +144,7 @@ class TestParse:
             b'<!DOCTYPE x [<!ENTITY a "b">]><DeviceLog>&a;</DeviceLog>',
         ],
     )
-    def test_document_that_is_not_a_device_log_raises(self, xml) -> None:
+    def test_document_that_is_not_a_device_log_raises(self, xml: bytes) -> None:
         with pytest.raises(EventLogParseError):
             parse_event_log(xml)
 
@@ -151,7 +155,9 @@ class TestParse:
 STAMP = datetime(2026, 10, 9, 22, 11, 35)
 
 
-def record(event: Event, event_time: datetime = STAMP, repeat: int = 1, source=None):
+def record(
+    event: Event, event_time: datetime = STAMP, repeat: int = 1, source: Source | None = None
+) -> dict[str, Any]:
     return event_record(event, event_time, repeat, source or Source("d", "h", None))
 
 
@@ -206,12 +212,14 @@ class TestRecord:
             "http://user:not-a-real-token@ddns.example.invalid:8080/nic/update",
         ],
     )
-    def test_urls_keep_only_scheme_and_host(self, url) -> None:
+    def test_urls_keep_only_scheme_and_host(self, url: str) -> None:
         rec = record(self.event(f"DynDNS-Fehler: {url} antwortet nicht."))
 
         assert "not-a-real-token" not in rec["msg"]
-        host = url.split("@")[-1].split("://")[-1].split("/")[0]
-        scheme = url.split("://")[0]
+        host = (
+            url.rsplit("@", maxsplit=1)[-1].rsplit("://", maxsplit=1)[-1].split("/", maxsplit=1)[0]
+        )
+        scheme = url.split("://", maxsplit=1)[0]
         assert rec["msg"] == f"DynDNS-Fehler: {scheme}://{host}/<redacted> antwortet nicht."
 
     def test_url_without_path_stays(self) -> None:

@@ -1,5 +1,6 @@
 import json
 import socket
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.request import urlopen
@@ -55,7 +56,9 @@ class TestMetrics:
             (FritzConnectionException("down"), "connection"),
         ],
     )
-    def test_failed_poll_counts_its_reason(self, mock_fc_cls: MagicMock, error, reason) -> None:
+    def test_failed_poll_counts_its_reason(
+        self, mock_fc_cls: MagicMock, error: Exception, reason: str
+    ) -> None:
         mock_fc_cls.side_effect = error
         name = f"m-{reason}"
 
@@ -157,13 +160,14 @@ class TestMetrics:
 
 
 @pytest.fixture
-def metrics_config(tmp_path: Path):
-    def write(port):
+def metrics_config(tmp_path: Path) -> Callable[[int], str]:
+    def write(port: int) -> str:
         path = tmp_path / "config.yaml"
         path.write_text(
             f"state_dir: {tmp_path / 'state'}\n"
             f"metrics_port: {port}\nmetrics_address: 127.0.0.1\n"
-            "devices:\n  - name: m-main\n    hostname: fritz.box\n    username: u\n    password: p\n"
+            "devices:\n"
+            "  - name: m-main\n    hostname: fritz.box\n    username: u\n    password: p\n"
         )
         return str(path)
 
@@ -173,7 +177,7 @@ def metrics_config(tmp_path: Path):
 @patch("fritzlogextractor.extractor.FritzConnection")
 class TestServing:
     def test_port_is_served_with_build_info(
-        self, mock_fc_cls: MagicMock, metrics_config, unused_port
+        self, mock_fc_cls: MagicMock, metrics_config: Callable[[int], str], unused_port: int
     ) -> None:
         with patch("fritzlogextractor.__main__.run"):
             main(["--config", metrics_config(unused_port)])
@@ -184,7 +188,9 @@ class TestServing:
         assert "process_" in body or "python_info" in body
         assert "_created" not in body
 
-    def test_once_does_not_serve(self, mock_fc_cls: MagicMock, metrics_config) -> None:
+    def test_once_does_not_serve(
+        self, mock_fc_cls: MagicMock, metrics_config: Callable[[int], str]
+    ) -> None:
         with (
             patch("fritzlogextractor.__main__.run"),
             patch("fritzlogextractor.metrics.serve") as serve,
@@ -194,7 +200,10 @@ class TestServing:
         serve.assert_not_called()
 
     def test_port_in_use_exits_1(
-        self, mock_fc_cls: MagicMock, metrics_config, capsys: pytest.CaptureFixture[str]
+        self,
+        mock_fc_cls: MagicMock,
+        metrics_config: Callable[[int], str],
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         with (
             patch("fritzlogextractor.__main__.run") as run,
@@ -209,7 +218,7 @@ class TestServing:
 
 
 @pytest.fixture
-def unused_port():
+def unused_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]

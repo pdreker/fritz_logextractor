@@ -45,7 +45,7 @@ class TestFileConfig:
 
         assert config.log_level == "DEBUG"
         assert config.poll_interval == 30
-        assert config.state_dir == "/tmp/fritzlogextractor"
+        assert config.state_dir == "/tmp/fritzlogextractor"  # noqa: S108 - value from the fixture file
         assert [d.hostname for d in config.devices] == ["fritz.box", "repeater.local"]
         assert config.devices[0].use_tls is True
         assert config.devices[0].connection_timeout == 10
@@ -60,10 +60,10 @@ class TestFileConfig:
         config = get_config(str(path))
 
         assert config.metrics_port is None
-        assert config.metrics_address == "0.0.0.0"
+        assert config.metrics_address == "0.0.0.0"  # noqa: S104 - the documented default
 
     @pytest.mark.parametrize("port", [0, 65536, -1])
-    def test_metrics_port_must_be_a_port(self, tmp_path: Path, port) -> None:
+    def test_metrics_port_must_be_a_port(self, tmp_path: Path, port: int) -> None:
         path = tmp_path / "c.yaml"
         path.write_text(f"metrics_port: {port}\ndevices:\n  - username: u\n    password: p\n")
 
@@ -71,7 +71,7 @@ class TestFileConfig:
             get_config(str(path))
 
     def test_unreadable_file(self) -> None:
-        with pytest.raises(ConfigFileUnreadableError, match="cannot read .*does-not-exist.yaml"):
+        with pytest.raises(ConfigFileUnreadableError, match=r"cannot read .*does-not-exist\.yaml"):
             get_config("tests/conffiles/does-not-exist.yaml")
 
     def test_invalid_yaml(self, tmp_path: Path) -> None:
@@ -89,12 +89,12 @@ class TestFileConfig:
             ({"devices": ["fritz.box"]}, "device 1"),
         ],
     )
-    def test_wrong_structure_is_a_config_error(self, data, where) -> None:
+    def test_wrong_structure_is_a_config_error(self, data: object, where: str) -> None:
         with pytest.raises(ConfigNotAMappingError, match=where):
             ExtractorConfig.from_config(data)
 
     @pytest.mark.parametrize("timeout", [0, -1])
-    def test_connection_timeout_must_be_positive(self, timeout) -> None:
+    def test_connection_timeout_must_be_positive(self, timeout: int) -> None:
         device = {"username": "u", "password": "p", "connection_timeout": timeout}
         with pytest.raises(ValueError, match="connection_timeout"):
             ExtractorConfig.from_config({"devices": [device]})

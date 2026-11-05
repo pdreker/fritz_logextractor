@@ -1,6 +1,7 @@
 """Tracker tests. The scenarios follow captures of a FRITZ!Box 7690 with a mesh repeater."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -16,11 +17,24 @@ def at(text: str) -> datetime:
     return datetime.strptime(text, "%d.%m.%y %H:%M:%S")
 
 
-def row(event_id, text, time, msg="m", count=1, since=None, group="sys"):
+def row(  # noqa: PLR0913, PLR0917 - mirrors the fields of a log row
+    event_id: int,
+    text: str,
+    time: str,
+    msg: str = "m",
+    count: int = 1,
+    since: str | None = None,
+    group: str = "sys",
+) -> Event:
     return Event(event_id, group, at(time), msg, count, at(since) if since else None)
 
 
-def take(tracker, events, boot=BOOT, box_boot=BOX_BOOT):
+def take(
+    tracker: EventLogTracker,
+    events: list[Event],
+    boot: datetime = BOOT,
+    box_boot: datetime | None = BOX_BOOT,
+) -> list[tuple[int, str, int]]:
     """Collect the new entries and commit, as the extractor does."""
     new = tracker.new_entries(events, boot, box_boot)
     tracker.commit(events, boot, box_boot)
@@ -138,7 +152,7 @@ class TestReboot:
         assert take(tracker, [training], boot=later, box_boot=None) == [(12, "00:00:34", 1)]
 
     @pytest.mark.parametrize("seconds", [-60, -1, 1, 60])
-    def test_boot_estimate_wobbling_is_the_same_boot(self, seconds) -> None:
+    def test_boot_estimate_wobbling_is_the_same_boot(self, seconds: int) -> None:
         tracker = EventLogTracker()
         take(tracker, [LOGIN])
 
@@ -176,6 +190,6 @@ class TestJson:
             {"version": 1, "boot": None, "rows": [[1, "sys", "m", "now", 1]]},
         ],
     )
-    def test_malformed_state_raises_value_error(self, data) -> None:
+    def test_malformed_state_raises_value_error(self, data: dict[str, Any]) -> None:
         with pytest.raises(ValueError):  # noqa: PT011
             EventLogTracker.from_json(data)

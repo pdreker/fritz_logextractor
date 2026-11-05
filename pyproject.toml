@@ -143,6 +143,9 @@ ignore = [
   "ARG002",  # same, in test methods
   "ANN401",  # Any is fine for mocks and fakes
 ]
+# Deviation: the FRITZ!Box reports local time without a zone; tests build such values on purpose
+# (the code marks each place with noqa).
+"tests/**/*.py" = ["DTZ001", "DTZ007"]
 # Deviation: a standalone script, not a package; its panel builders take many keyword options.
 "examples/grafana/build_dashboard.py" = ["INP001", "PLR0913"]
 

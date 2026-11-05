@@ -2,6 +2,7 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,7 +17,7 @@ LOG_PATH = "/devicelog.lua?sid=0123456789abcdef"
 TZ_RULE = "CET-1CEST,M3.5.0,M10.5.0/3"
 
 
-def log_xml(*events):
+def log_xml(*events: tuple[str, str, str, str, str]) -> bytes:
     body = "".join(
         f"<Event><id>{i}</id><group>{g}</group><date>{d}</date><time>{t}</time><msg>{m}</msg></Event>"
         for i, g, d, t, m in events
@@ -44,13 +45,18 @@ def response(body: bytes, status: int = 200) -> MagicMock:
     return resp
 
 
-def setup_fc(mock_fc_cls: MagicMock, *bodies: bytes, time_info=None, device_info=INFO):
+def setup_fc(
+    mock_fc_cls: MagicMock,
+    *bodies: bytes,
+    time_info: dict[str, Any] | None = None,
+    device_info: object = INFO,
+) -> MagicMock:
     fc = mock_fc_cls.return_value
     fc.address = "http://fritz.box"
     fc.port = 49000
     infos = device_info if isinstance(device_info, list) else None
 
-    def call_action(service, action, **kwargs):
+    def call_action(service: str, action: str, **kwargs: Any) -> object:
         if action == "X_AVM-DE_GetDeviceLogPath":
             return {"NewDeviceLogPath": LOG_PATH}
         if service == "Time1":
@@ -72,7 +78,7 @@ def setup_fc(mock_fc_cls: MagicMock, *bodies: bytes, time_info=None, device_info
     return fc
 
 
-def device(**overrides) -> DeviceConfig:
+def device(**overrides: Any) -> DeviceConfig:
     values = {"hostname": "fritz.box", "username": "u", "password": "p", "name": "Box"}
     values.update(overrides)
     return DeviceConfig(**values)
@@ -132,13 +138,13 @@ class TestDeviceExtractor:
 
         DeviceExtractor(device(password=None, password_file=str(pw))).poll()
 
-        assert mock_fc_cls.call_args.kwargs["password"] == "from-file"
+        assert mock_fc_cls.call_args.kwargs["password"] == "from-file"  # noqa: S105 - test value
 
     @pytest.mark.parametrize(
         ("content", "error"), [(None, "No such file"), ("x" * 33, "longer than 32")]
     )
     def test_bad_password_file_is_an_extraction_error(
-        self, mock_fc_cls: MagicMock, tmp_path: Path, content, error
+        self, mock_fc_cls: MagicMock, tmp_path: Path, content: str | None, error: str
     ) -> None:
         pw = tmp_path / "pw"
         pw.write_text("p")
@@ -197,7 +203,7 @@ class TestDeviceExtractor:
         "current", [None, datetime(1970, 1, 1, 0, 1, 28), "not a time"], ids=repr
     )
     def test_current_time_before_clock_sync_falls_back_to_the_rule(
-        self, mock_fc_cls: MagicMock, current
+        self, mock_fc_cls: MagicMock, current: object
     ) -> None:
         setup_fc(
             mock_fc_cls,
@@ -235,11 +241,11 @@ class TestDeviceExtractor:
         assert len(extractor.poll()) == 1
 
     @pytest.mark.parametrize("path", ["@evil.example/x", "//evil.example/x", "devicelog.lua", None])
-    def test_log_path_must_be_a_plain_path(self, mock_fc_cls: MagicMock, path) -> None:
+    def test_log_path_must_be_a_plain_path(self, mock_fc_cls: MagicMock, path: str | None) -> None:
         fc = setup_fc(mock_fc_cls, log_xml(CONNECTED))
         call_action = fc.call_action.side_effect
 
-        def odd_path(service, action, **kwargs):
+        def odd_path(service: str, action: str, **kwargs: Any) -> object:
             if action == "X_AVM-DE_GetDeviceLogPath":
                 return {"NewDeviceLogPath": path}
             return call_action(service, action, **kwargs)
@@ -280,7 +286,9 @@ class TestDeviceExtractor:
     @pytest.mark.parametrize(
         "error", [FritzConnectionException("down"), RequestsConnectionError("refused")]
     )
-    def test_connection_error_reconnects_on_next_poll(self, mock_fc_cls: MagicMock, error) -> None:
+    def test_connection_error_reconnects_on_next_poll(
+        self, mock_fc_cls: MagicMock, error: Exception
+    ) -> None:
         mock_fc_cls.side_effect = [error, mock_fc_cls.return_value]
         setup_fc(mock_fc_cls, log_xml(CONNECTED))
         extractor = DeviceExtractor(device())
@@ -410,7 +418,7 @@ class TestState:
 
     @pytest.mark.parametrize("content", ["not json", "[]", '{"serial": "SERIAL1"}'])
     def test_broken_state_file_is_ignored_with_a_warning(
-        self, mock_fc_cls: MagicMock, tmp_path: Path, caplog: pytest.LogCaptureFixture, content
+        self, mock_fc_cls: MagicMock, tmp_path: Path, caplog: pytest.LogCaptureFixture, content: str
     ) -> None:
         (tmp_path / "fritz.box.json").write_text(content)
         setup_fc(mock_fc_cls, log_xml(CONNECTED))
@@ -432,7 +440,7 @@ class TestState:
         assert caplog.text.count("could not write the state file") == 1
 
 
-def read_polls(directory):
+def read_polls(directory: Path) -> list[Any]:
     return [json.loads(line) for line in (directory / "polls.jsonl").read_text().splitlines()]
 
 
@@ -530,7 +538,7 @@ class TestCapture:
 
 
 @pytest.fixture
-def config_file(tmp_path: Path):
+def config_file(tmp_path: Path) -> str:
     path = tmp_path / "config.yaml"
     path.write_text(
         f"state_dir: {tmp_path / 'state'}\n"
@@ -573,7 +581,7 @@ class TestMain:
         assert [json.loads(line)["id"] for line in capsys.readouterr().out.splitlines()] == [22]
 
     def test_closed_stdout_ends_the_tool(
-        self, mock_fc_cls: MagicMock, config_file, capsys: pytest.CaptureFixture[str]
+        self, mock_fc_cls: MagicMock, config_file: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
         setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(LOGIN))
 
@@ -609,7 +617,7 @@ class TestMain:
         self,
         mock_fc_cls: MagicMock,
         capsys: pytest.CaptureFixture[str],
-        config_file,
+        config_file: str,
         tmp_path: Path,
     ) -> None:
         setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(LOGIN))
@@ -628,7 +636,7 @@ class TestMain:
         mock_fc_cls: MagicMock,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
-        config_file,
+        config_file: str,
     ) -> None:
         setup_fc(mock_fc_cls, log_xml(CONNECTED), log_xml(LOGIN))
 
