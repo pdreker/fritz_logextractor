@@ -287,7 +287,7 @@ test = [
 requires-dist = [
     { name = "attrs", specifier = ">=22.2,<27.0" },
     { name = "defusedxml", specifier = ">=0.7.1" },
-    { name = "fritzconnection", specifier = ">=1.0.0" },
+    { name = "fritzconnection", specifier = ">=1.0.0,<2" },
     { name = "prometheus-client", specifier = ">=0.26.0" },
     { name = "pyyaml" },
 ]
