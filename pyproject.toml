@@ -15,7 +15,7 @@ classifiers = [
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "fritzconnection>=1.0.0",
+    "fritzconnection>=1.0.0,<2",
     "pyyaml",
     "attrs>=22.2,<27.0",
     "defusedxml>=0.7.1",
