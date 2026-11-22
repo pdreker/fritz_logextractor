@@ -54,7 +54,9 @@ uv run pytest
 uv run mkdocs build --strict
 ```
 
-Ruff config is copied from fritz_exporter (line length 100, broad rule set, tests excluded).
+Ruff and ty config is a copy of the shared template (`templates/pyproject-tools.toml` in
+pdreker/github-workflows): line length 100, broad rule set. Tests are linted too; `per-file-ignores`
+turns off only the rules that make no sense there. A deviation carries a comment with its reason.
 Use `logging`, never `print()`. Exception messages are plain strings assigned to `msg` first.
 
 Tests use synthetic event logs that follow patterns seen on real boxes. **The repo is public:**
