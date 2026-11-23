@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/pdreker/fritz_logextractor/compare/fritzlogextractor-v0.3.0...fritzlogextractor-v0.3.1) (2026-11-23)
+
+
+### Documentation
+
+* AGENTS.md says tests are linted, as pyproject.toml does ([#63](https://github.com/pdreker/fritz_logextractor/issues/63)) ([f6c494d](https://github.com/pdreker/fritz_logextractor/commit/f6c494d14ab665404f88f99404d056b71ab03a75))
+
 ## [0.3.0](https://github.com/pdreker/fritz_logextractor/compare/fritzlogextractor-v0.2.0...fritzlogextractor-v0.3.0) (2026-11-05)
 
 
