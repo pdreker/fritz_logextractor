@@ -1,6 +1,6 @@
 # The requirements and the wheel are the same on every platform: build them once,
 # on the build host, with the versions and hashes from uv.lock.
-FROM --platform=$BUILDPLATFORM docker.io/astral/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
+FROM --platform=$BUILDPLATFORM docker.io/astral/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
 
 FROM --platform=$BUILDPLATFORM python:3.14.9-alpine@sha256:dbeb11d16bb95c3a7e3c25c842cb9f20cbc8c18f8be0461a4a0dcc861ad386a0 AS build
 COPY --from=uv /uv /usr/local/bin/uv
