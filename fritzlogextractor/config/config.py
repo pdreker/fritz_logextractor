@@ -128,12 +128,12 @@ class DeviceConfig:
     )
     use_tls: bool = field(default=False, converter=converters.to_bool)
 
-    @password.validator  # ty: ignore[unresolved-attribute]
+    @password.validator  # ty: ignore[missing-attribute]
     def check_password(self, _: attrs.Attribute, value: str | None) -> None:
         if value is not None:
             _check_password_length(value)
 
-    @password_file.validator  # ty: ignore[unresolved-attribute]
+    @password_file.validator  # ty: ignore[missing-attribute]
     def check_password_file(self, _: attrs.Attribute, value: str | None) -> None:
         if value is not None and not Path(value).is_file():
             msg = "Password file does not exist."
@@ -180,7 +180,7 @@ class ExtractorConfig:
     )
     metrics_address: str = field(default=DEFAULT_METRICS_ADDRESS, validator=validators.min_len(1))
 
-    @devices.validator  # ty: ignore[unresolved-attribute]
+    @devices.validator  # ty: ignore[missing-attribute]
     def check_devices(self, _: attrs.Attribute, value: list[DeviceConfig]) -> None:
         if not value:
             msg = "No devices found in config."
